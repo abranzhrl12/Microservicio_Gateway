@@ -1,0 +1,78 @@
+// src/config/fastify.config.ts
+import Fastify from 'fastify';
+import fastifyCompress from '@fastify/compress';
+import fastifyHelmet from '@fastify/helmet';
+import cors from '@fastify/cors';
+import { Logger } from '@nestjs/common';
+import { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { ConfigService } from '@nestjs/config';
+import websocketPlugin from '@fastify/websocket'; // <-- ¡IMPORTA EL PLUGIN DE WEBSOCKETS!
+
+export const configureFastifyPlugins = async (
+  app: NestFastifyApplication,
+  logger: Logger,
+  configService: ConfigService,
+) => {
+  const fastifyInstance = app.getHttpAdapter().getInstance();
+
+  // Obtén los orígenes permitidos de las variables de entorno
+  const frontendUrls = configService.get<string | string[]>('FRONTEND_URLS');
+  let allowedOrigins: string[] = [];
+
+  if (frontendUrls) {
+    if (Array.isArray(frontendUrls)) {
+      allowedOrigins = frontendUrls.map((url) => url.trim());
+    } else if (typeof frontendUrls === 'string') {
+      allowedOrigins = frontendUrls.split(',').map((url) => url.trim());
+    }
+  }
+
+  // --- ¡CAMBIO DE ORDEN SUGERIDO AQUÍ! ---
+  // Registra el plugin de WebSocket primero o entre los primeros.
+  // @ts-ignore
+  await fastifyInstance.register(websocketPlugin);
+  logger.log('Plugin de WebSocket activado con @fastify/websocket.');
+  // ------------------------------------
+
+  // Registra el plugin de CORS
+  // @ts-ignore
+  await fastifyInstance.register(cors, {
+    origin: allowedOrigins,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    exposedHeaders: ['Set-Cookie'],
+  });
+  logger.log(`CORS habilitado con @fastify/cors para orígenes: ${allowedOrigins.join(', ')}`);
+
+  // Registra el plugin de compresión
+  // @ts-ignore
+  await fastifyInstance.register(fastifyCompress);
+  logger.log('Compresión activada con @fastify/compress.');
+
+  // Registra el plugin de seguridad (Helmet)
+  // @ts-ignore
+  await fastifyInstance.register(fastifyHelmet);
+  logger.log('Seguridad HTTP activada con @fastify/helmet.');
+
+
+  // Hooks de Fastify (pueden ir al final, ya que se aplican a todas las rutas)
+  fastifyInstance.addHook('onRequest', (request, reply, done) => {
+    logger.debug(`[Fastify] Petición entrante: ${request.method} ${request.url}`);
+    done();
+  });
+
+  fastifyInstance.addHook('onError', (request, reply, error, done) => {
+    logger.error(`[Fastify][onError] ${error.message}`, error.stack);
+    done();
+  });
+
+  logger.log('Hooks y plugins de Fastify configurados.');
+};
+
+export const createFastifyInstance = (logger: Logger) => {
+  return Fastify({
+    logger: true,
+    bodyLimit: 50 * 1024 * 1024, // Límite de 50MB para el cuerpo de la petición
+  });
+};

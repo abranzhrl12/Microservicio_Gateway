@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prueba de WebSocket - Gateway NestJS</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #0056b3; text-align: center; margin-bottom: 25px;}
+        .section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"] { width: calc(100% - 120px); padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px; }
+        button { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: background-color 0.3s ease; }
+        button#connectBtn { background-color: #28a745; color: white; }
+        button#connectBtn:hover { background-color: #218838; }
+        button#disconnectBtn { background-color: #dc3545; color: white; }
+        button#disconnectBtn:hover { background-color: #c82333; }
+        button#sendBtn { background-color: #007bff; color: white; }
+        button#sendBtn:hover { background-color: #0056b3; }
+        textarea { width: 100%; height: 150px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; margin-top: 10px; background-color: #e9ecef; }
+        .status { text-align: center; margin-top: 20px; font-weight: bold; }
+        .status.connected { color: #28a745; }
+        .status.disconnected { color: #dc3545; }
+        .status.connecting { color: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Prueba de WebSocket con NestJS Gateway</h1>
+
+        <div class="section">
+            <label for="websocketUrl">URL del WebSocket:</label>
+            <input type="text" id="websocketUrl" value="ws://localhost:4000/ws" placeholder="Ej: ws://localhost:4000/ws">
+            <button id="connectBtn">Conectar</button>
+            <button id="disconnectBtn" disabled>Desconectar</button>
+            <div class="status" id="connectionStatus">Desconectado</div>
+        </div>
+
+        <div class="section">
+            <label for="messageInput">Mensaje a enviar:</label>
+            <input type="text" id="messageInput" placeholder="Escribe tu mensaje aquí">
+            <button id="sendBtn" disabled>Enviar Mensaje</button>
+        </div>
+
+        <div class="section">
+            <label for="messagesLog">Registro de Mensajes:</label>
+            <textarea id="messagesLog" readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        const websocketUrlInput = document.getElementById('websocketUrl');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const messagesLog = document.getElementById('messagesLog');
+        const connectionStatus = document.getElementById('connectionStatus');
+
+        let ws; // Variable para almacenar la conexión WebSocket
+
+        function updateStatus(status, className) {
+            connectionStatus.textContent = status;
+            connectionStatus.className = 'status ' + className;
+        }
+
+        function logMessage(message) {
+            const now = new Date();
+            messagesLog.value += `[${now.toLocaleTimeString()}] ${message}\n`;
+            messagesLog.scrollTop = messagesLog.scrollHeight; // Scroll al final
+        }
+
+        connectBtn.addEventListener('click', () => {
+            const url = websocketUrlInput.value;
+            if (!url) {
+                alert('Por favor, ingresa una URL de WebSocket.');
+                return;
+            }
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                logMessage('Ya estás conectado.');
+                return;
+            }
+
+            updateStatus('Conectando...', 'connecting');
+            logMessage(`Intentando conectar a: ${url}...`);
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                updateStatus('Conectado', 'connected');
+                logMessage('¡Conexión WebSocket establecida!');
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendBtn.disabled = false;
+                messageInput.focus();
+            };
+
+            ws.onmessage = (event) => {
+                logMessage(`Mensaje recibido del servidor: ${event.data}`);
+            };
+
+            ws.onclose = (event) => {
+                updateStatus('Desconectado', 'disconnected');
+                logMessage(`Conexión WebSocket cerrada. Código: ${event.code}, Razón: ${event.reason || 'Ninguna'}`);
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendBtn.disabled = true;
+            };
+
+            ws.onerror = (error) => {
+                updateStatus('Error', 'disconnected');
+                logMessage(`Error en WebSocket: ${error.message || 'Error desconocido'}`);
+                console.error('WebSocket Error:', error);
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendBtn.disabled = true;
+            };
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close(1000, 'Desconexión solicitada por el usuario.'); // 1000 es el código de cierre normal
+            } else {
+                logMessage('No hay una conexión activa para desconectar.');
+            }
+        });
+
+        sendBtn.addEventListener('click', () => {
+            const message = messageInput.value;
+            if (ws && ws.readyState === WebSocket.OPEN && message) {
+                ws.send(message);
+                logMessage(`Mensaje enviado: ${message}`);
+                messageInput.value = ''; // Limpiar el input
+            } else if (!message) {
+                alert('No puedes enviar un mensaje vacío.');
+            } else {
+                logMessage('No hay conexión WebSocket activa. ¡Conéctate primero!');
+            }
+        });
+
+        // Permitir enviar mensaje con Enter
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>
