@@ -4,6 +4,9 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from 'src/auth/strategies/jwt.strategy';
 import { ConfigService } from '@nestjs/config';
+import { ClientsModule } from '@nestjs/microservices';
+import { LoginOrchestrator } from 'src/orchestrators/login/login.orchestrator';
+import { AuthController } from './auth.controller';
 
 
 @Module({
@@ -16,8 +19,11 @@ import { ConfigService } from '@nestjs/config';
         // No necesitamos 'expiresIn' aquí, ya que solo estamos validando el token que ya existe.
       }),
     }),
+    ClientsModule,
+    
   ],
-  providers: [JwtStrategy],
+  controllers:[AuthController],
+  providers: [JwtStrategy,LoginOrchestrator],
   exports: [PassportModule, JwtModule],
 })
 export class AuthModule {}
