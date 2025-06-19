@@ -13,6 +13,7 @@ export const JoiValidationSchema = Joi.object({
   FRONTEND_URLS: Joi.alternatives()
     .try(
       Joi.array().items(Joi.string().uri()), // ya es array
+      
       Joi.string().custom((value, helpers) => {
         const urls = value.split(',').map((url) => url.trim());
         const { error } = Joi.array().items(Joi.string().uri()).validate(urls);
@@ -23,4 +24,5 @@ export const JoiValidationSchema = Joi.object({
       }),
     )
     .default(['http://localhost:4000']),
+      NATS_URL: Joi.string().uri().required(),
 });
