@@ -96,3 +96,107 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+
+
+//Role
+🚀 API Gateway - Documentación
+Este documento describe cómo interactuar con nuestra API para la gestión de roles.
+
+URL Base de la API: http://localhost:4000 (¡Asegúrate de que el Gateway esté corriendo en este puerto!)
+
+🔑 Autenticación (¡Importante!)
+Casi todas las operaciones requieren que estés autenticado. Debes incluir tu token JWT en el encabezado Authorization de cada solicitud, con el prefijo Bearer.
+
+Ejemplo de encabezado para todas las solicitudes protegidas:
+
+Authorization: Bearer TU_TOKEN_JWT_AQUI
+🧑‍💻 Endpoints de Roles
+1. Crear un Nuevo Rol
+Método: POST
+Ruta: /roles/create
+Necesitas: Tu token JWT.
+Cuerpo de la Solicitud (JSON):
+
+JSON
+
+{
+  "variables": {
+    "createRoleInput": {
+      "name": "NombreDelRol",          // Ej: "Administrador", "Docente", "Estudiante"
+      "description": "Descripción del rol." // Opcional, pero recomendado
+    }
+  }
+}
+Ejemplo con curl:
+
+Bash
+
+curl -X POST \
+  http://localhost:4000/roles/create \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer TU_TOKEN_JWT" \
+  -d '{
+        "variables": {
+          "createRoleInput": {
+            "name": "Supervisor",
+            "description": "Rol para supervisar operaciones"
+          }
+        }
+      }'
+Respuestas Comunes:
+
+200 OK: Rol creado. Recibirás los datos del rol creado.
+400 Bad Request: Datos inválidos o el nombre del rol ya existe.
+401 Unauthorized: No hay token o el token es inválido.
+403 Forbidden: No tienes permiso para crear roles.
+2. Obtener Todos los Roles (Paginado)
+Método: GET
+Ruta: /roles/all
+Necesitas: Tu token JWT.
+Opcional: Puedes añadir parámetros de paginación a la URL.
+Parámetros de URL (Query Parameters):
+
+page: Número de página que quieres (ej. ?page=2). Por defecto es 1.
+limit: Cuántos roles quieres por página (ej. &limit=5). Por defecto es 10.
+Ejemplos de Solicitud:
+
+Obtener la primera página (por defecto 10 roles):
+GET http://localhost:4000/roles/all
+Obtener la página 2 con 5 roles por página:
+GET http://localhost:4000/roles/all?page=2&limit=5
+Obtener la primera página con 20 roles:
+GET http://localhost:4000/roles/all?limit=20
+Ejemplo con curl (Obtener la primera página):
+
+Bash
+
+curl -X GET \
+  http://localhost:4000/roles/all \
+  -H "Authorization: Bearer TU_TOKEN_JWT"
+Ejemplo de Respuesta 200 OK (Paginada):
+
+JSON
+
+{
+  "items": [
+    // Lista de objetos de rol
+    {
+      "id": "1",
+      "name": "user",
+      "description": "Usuario estándar",
+      "createdAt": "...",
+      "updatedAt": "..."
+    }
+  ],
+  "totalItems": 15,        // Cantidad total de roles en el sistema
+  "totalPages": 2,         // Total de páginas disponibles
+  "currentPage": 1,        // La página que estás viendo
+  "itemsPerPage": 10       // Roles por página en esta respuesta
+}
+Respuestas Comunes:
+
+200 OK: Lista de roles paginada.
+400 Bad Request: Parámetros de paginación inválidos (ej. page o limit no son números válidos).
+401 Unauthorized: No hay token o el token es inválido.
+403 Forbidden: No tienes permiso para ver roles.
