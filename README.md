@@ -200,3 +200,50 @@ Respuestas Comunes:
 400 Bad Request: Parámetros de paginación inválidos (ej. page o limit no son números válidos).
 401 Unauthorized: No hay token o el token es inválido.
 403 Forbidden: No tienes permiso para ver roles.
+
+
+//traer roles 
+{
+    "query": "query GetAllRoles($paginationInput: PaginationInput) { findAllRoles(paginationInput: $paginationInput) { items { id name description createdAt updatedAt } totalItems totalPages currentPage itemsPerPage } }",
+    "variables": {
+        "paginationInput": {
+            "page": 1,
+            "limit": 5
+        }
+    },
+    "operationName": "GetAllRoles"
+}
+
+
+//update role
+{
+  "query": "mutation UpdateRole($id: ID!, $updateRoleInput: UpdateRoleInput!) { updateRole(id: $id, updateRoleInput: $updateRoleInput) { id name description createdAt updatedAt } }",
+  "variables": {
+    "id": "7",
+    "updateRoleInput": {
+      "name": "actulizando pruebaaaa",
+      "description": "Nueva descripción para el rol."
+    }
+  },
+  "operationName": "UpdateRole"
+}
+
+//crear role
+{
+    "query": "mutation CreateRole($createRoleInput: CreateRoleInput!) { createRole(createRoleInput: $createRoleInput) { id name description createdAt updatedAt } }",
+    "variables": {
+        "createRoleInput": {
+            "name": "NuevoRolDePrueba 44gfdfgr",
+            "description": "Este es un rol creado desde Postman."
+        }
+    },
+    "operationName": "CreateRole"
+}
+
+//remove
+{
+    "query": "mutation RemoveRole($id: ID!) { removeRole(id: $id) }",
+    "variables": {
+        "id": "7"  // Reemplaza "7" con el ID del rol que quieres eliminar
+    }
+}

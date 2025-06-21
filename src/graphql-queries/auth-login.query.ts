@@ -5,6 +5,7 @@ export const loginQuery = gql`
   mutation LoginUser($loginInput: LoginInput!) {
     loginUser(loginInput: $loginInput) {
       accessToken
+      refreshToken
       user {
         id
         email

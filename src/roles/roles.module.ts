@@ -1,23 +1,25 @@
-// src/roles/roles.module.ts (EN TU API GATEWAY - MODIFICADO)
+// src/roles/roles.module.ts (CORRECCIÓN PROPUESTA)
 
 import { Module } from '@nestjs/common';
-import { RolesController } from './roles.controller'; // Asegúrate de que la ruta es correcta
-import { RoleOrchestrator } from 'src/orchestrators/role/role.orchestrator'; // Asegúrate de que la ruta es correcta
-import { ClientsModule } from '@nestjs/microservices'; // <--- ¡Importa ClientsModule aquí!
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard'; // Importa si lo usas en el RolesController o providers
-import { PassportModule } from '@nestjs/passport'; // Posiblemente necesario para JwtAuthGuard
+import { RoleOrchestrator } from 'src/orchestrators/role/role.orchestrator';
+import { RolesResolver } from './roles.resolver';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { PassportModule } from '@nestjs/passport'; // Necesario si usas Passport
+
+// ¡IMPORTA EL MÓDULO QUE YA TIENE LA CONFIGURACIÓN DE NATS!
+// Asumo que es 'NatsClientModule' basado en conversaciones anteriores.
+import { NatsClientModule } from 'src/nats-client/nats-client.module'; // <--- ¡CAMBIO CRUCIAL AQUÍ!
 
 @Module({
   imports: [
-    // Importa PassportModule para que JwtAuthGuard funcione correctamente
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    ClientsModule, 
-
+    NatsClientModule, // <--- ¡Esto es lo que debe ir aquí!
   ],
-  controllers: [RolesController],
+  controllers: [],
   providers: [
     RoleOrchestrator,
-    JwtAuthGuard 
+    RolesResolver,
+    JwtAuthGuard // Si JwtAuthGuard ya es global con APP_GUARD en AppModule, puedes considerar quitarlo de aquí.
   ],
 })
 export class RolesModule {}

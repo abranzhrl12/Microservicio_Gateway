@@ -1,29 +1,31 @@
 // src/orchestrators/role/role.orchestrator.ts (EN TU API GATEWAY - CORREGIDO)
-
 import { Injectable, Inject, Logger, HttpStatus } from '@nestjs/common';
-
-import { CreateRoleInput, UpdateRoleInput } from 'src/common/interfaces/role.interface';
-import { createRoleMutation, findAllRolesQuery,updateRoleMutation } from 'src/graphql-queries';
+import { createRoleMutation, findAllRolesQuery,findRoleByIdQuery,removeRoleMutation,updateRoleMutation } from 'src/graphql-queries';
 import { OrchestratorResult } from 'src/common/interfaces/orchestrator-result.interface';
-import { tryCatch } from 'graphql-request/build/lib/prelude';
 import { firstValueFrom } from 'rxjs';
 import { ClientProxy } from '@nestjs/microservices';
 import { PaginationInput } from 'src/common/dto/pagination.input';
+import { PaginatedRoles } from 'src/common/interfaces/paginated-roles.interface';
+import { deepTransformDates, transformDates } from 'src/common/utils/date.utils';
+import { CreateRoleInput } from '../../roles/dto/create-role.input';
+import { UpdateRoleInput } from '../../roles/dto/update-role.input';
+import { Args, Context, Mutation } from '@nestjs/graphql';
 
 @Injectable()
 export class RoleOrchestrator {
   private readonly logger = new Logger(RoleOrchestrator.name);
 
   constructor(
-    @Inject('NATS_SERVICE') private authServiceClient: ClientProxy, // <--- ¡CAMBIA 'AUTH_SERVICE' A 'NATS_SERVICE' AQUÍ!
+    @Inject('NATS_SERVICE') private authServiceClient: ClientProxy,
   ) {}
 
-   private async sendGraphqlRequest(
+
+  private async sendGraphqlRequest(
     correlationId: string,
     query: string,
-    variables: any, // Los variables específicos de la query
+    variables: any,
     authorizationHeader?: string,
-    operationName: string = 'GraphQL Operation', // Nombre para el log
+    operationName: string = 'GraphQL Operation',
   ): Promise<OrchestratorResult> {
     this.logger.log(
       `[${correlationId}] [Role Orchestrator] Enviando solicitud a Auth Service para ${operationName} vía NATS.`,
@@ -35,13 +37,6 @@ export class RoleOrchestrator {
 
     if (authorizationHeader) {
       headersToSend['Authorization'] = authorizationHeader;
-      this.logger.debug(
-        `[${correlationId}] [Role Orchestrator] Incluyendo Authorization header en mensaje NATS para Auth Service (${operationName}).`,
-      );
-    } else {
-      this.logger.warn(
-        `[${correlationId}] [Role Orchestrator] No se detectó Authorization header para reenviar al Auth Service (${operationName}).`,
-      );
     }
 
     try {
@@ -72,9 +67,14 @@ export class RoleOrchestrator {
       this.logger.log(
         `[${correlationId}] [Role Orchestrator] ${operationName} exitosamente por Auth Service.`,
       );
+
+      // ¡¡¡CAMBIO CLAVE AQUÍ: APLICAR deepTransformDates AL response.data!!!
+      const transformedData = deepTransformDates(response.data);
+      this.logger.debug(`[${correlationId}] Datos de respuesta del Auth Service transformados con deepTransformDates.`);
+
       return {
         statusCode: HttpStatus.OK,
-        body: response.data, // Por defecto, se asume que la data está directamente aquí
+        body: transformedData, // Devolver los datos transformados
         errors: undefined,
         message: `${operationName} exitosamente.`,
       };
@@ -113,15 +113,11 @@ export class RoleOrchestrator {
       'crear rol',
     );
 
-    // Si hubo un error en la capa genérica, lo devolvemos directamente
     if (result.errors) {
       return result;
     }
 
-    // Acceder a la data específica de la mutación si es necesario (ej. result.body.createRole)
-    // El sendGraphqlRequest devuelve response.data, que contiene createRole
-    result.body = result.body.createRole; // Ajustar el body para devolver directamente el objeto Role
-
+    result.body = result.body.createRole; 
     return result;
   }
 
@@ -142,19 +138,15 @@ export class RoleOrchestrator {
       'obtener roles paginados',
     );
 
-    // Si hubo un error en la capa genérica, lo devolvemos directamente
     if (result.errors) {
       return result;
     }
-
-    // Acceder a la data específica de la query (response.data.findAllRoles)
-    result.body = result.body.findAllRoles; // Ajustar el body para devolver directamente la estructura paginada
-
+    result.body = result.body.findAllRoles as PaginatedRoles;
     return result;
   }
 
   async updateRole(
-    id: string, // El ID del rol a actualizar
+    id: string,
     updateRoleInput: UpdateRoleInput,
     correlationId: string,
     authorizationHeader?: string,
@@ -166,7 +158,7 @@ export class RoleOrchestrator {
     const result = await this.sendGraphqlRequest(
       correlationId,
       updateRoleMutation,
-      { id: id, updateRoleInput: updateRoleInput }, // Pasar id y updateRoleInput como variables
+      { id: id, updateRoleInput: updateRoleInput },
       authorizationHeader,
       'actualizar rol',
     );
@@ -175,7 +167,62 @@ export class RoleOrchestrator {
       return result;
     }
 
-    result.body = result.body.updateRole; // Acceder a la data específica de la mutación
+    result.body = result.body.updateRole;
+    return result;
+  }
+  
+  async removeRole(
+    id: string,
+    correlationId: string,
+    authorizationHeader?: string,
+  ): Promise<OrchestratorResult> {
+    this.logger.log(
+      `[${correlationId}] [Role Orchestrator] Iniciando orquestación para eliminar rol con ID: ${id}.`,
+    );
+
+    const result = await this.sendGraphqlRequest(
+      correlationId,
+      removeRoleMutation, // La mutación GraphQL para eliminar rol
+      { id: id }, // Las variables que necesita el microservicio de Auth
+      authorizationHeader,
+      'eliminar rol',
+    );
+
+    if (result.errors) {
+      // El microservicio ya maneja NotFoundException y BadRequestException,
+      // aquí solo propagamos esos errores como OrchestratorResult
+      return result; 
+    }
+    result.body = result.body.removeRole; 
+    return result;
+  }
+
+    // *** NUEVO MÉTODO findRoleById EN EL ORCHESTRATOR ***
+  async findRoleById(
+    id: string,
+    correlationId: string,
+    authorizationHeader?: string,
+  ): Promise<OrchestratorResult> {
+    this.logger.log(
+      `[${correlationId}] [Role Orchestrator] Iniciando orquestación para buscar rol con ID: ${id}.`,
+    );
+
+    const result = await this.sendGraphqlRequest(
+      correlationId,
+      findRoleByIdQuery, // La query GraphQL para buscar por ID
+      { id: id }, // Las variables que necesita el microservicio de Auth
+      authorizationHeader,
+      'buscar rol por ID',
+    );
+
+    if (result.errors) {
+      // El microservicio ya maneja NotFoundException, aquí solo propagamos esos errores
+      return result; 
+    }
+
+    // El resultado esperado del microservicio es un objeto Role.
+    // Como deepTransformDates ya se aplica en sendGraphqlRequest, las fechas ya estarán transformadas.
+    result.body = result.body.findRoleById; 
     return result;
   }
 }

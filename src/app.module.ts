@@ -10,9 +10,10 @@ import { WebSocketModule } from './websocket/websocket.module';
 import { NatsClientModule } from './nats-client/nats-client.module';
 import { RolesModule } from './roles/roles.module';
 import { ExecutionResult, GraphQLError } from 'graphql';
-import { GraphQLModule } from '@nestjs/graphql';
+import { GraphQLISODateTime, GraphQLModule } from '@nestjs/graphql';
 import { MercuriusDriver, MercuriusDriverConfig } from '@nestjs/mercurius';
 import { join } from 'path';
+
 @Module({
   imports: [
     // ConfigModule para cargar las variables de entorno y validarlas con Joi
@@ -28,10 +29,14 @@ import { join } from 'path';
     RolesModule,
     GraphQLModule.forRoot<MercuriusDriverConfig>({
       driver: MercuriusDriver,
+       autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+      sortSchema: true,
       graphiql: false,
       context: ({ req }) => ({ req }),
       jit: 10,
+      resolvers: { DateTime: GraphQLISODateTime },
       errorFormatter: (execution: ExecutionResult & { errors: GraphQLError[] }, context: any) => {
+        
         const error = execution.errors[0];
         const originalError = error?.extensions?.originalError;
 

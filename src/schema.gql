@@ -1,0 +1,66 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+input CreateRoleInput {
+  description: String
+  name: String!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type Mutation {
+  createRole(createRoleInput: CreateRoleInput!): Role!
+
+  """Elimina un rol (requiere permiso para eliminar roles)."""
+  removeRole(id: ID!): Boolean!
+  updateRole(id: ID!, updateRoleInput: UpdateRoleInput!): Role!
+}
+
+type PaginatedRoles {
+  """El número de la página actual."""
+  currentPage: Int!
+
+  """Lista de roles en la página actual."""
+  items: [Role!]!
+
+  """La cantidad de elementos por página."""
+  itemsPerPage: Int!
+
+  """Número total de elementos disponibles en todas las páginas."""
+  totalItems: Int!
+
+  """Número total de páginas disponibles."""
+  totalPages: Int!
+}
+
+input PaginationInput {
+  """Cantidad de elementos por página (por defecto: 10)."""
+  limit: Int = 10
+
+  """Número de página deseada (por defecto: 1)."""
+  page: Int = 1
+}
+
+type Query {
+  findAllRoles(paginationInput: PaginationInput): PaginatedRoles!
+
+  """Obtiene un rol por su ID."""
+  findRoleById(id: ID!): Role!
+}
+
+type Role {
+  createdAt: DateTime
+  description: String
+  id: ID!
+  name: String!
+  updatedAt: DateTime
+}
+
+input UpdateRoleInput {
+  description: String
+  name: String
+}

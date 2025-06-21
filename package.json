@@ -37,6 +37,7 @@
     "fastify": "^5.4.0",
     "graphql": "^16.11.0",
     "graphql-request": "^7.2.0",
+    "graphql-scalars": "^1.24.2",
     "joi": "^17.13.3",
     "nats": "^2.29.3",
     "node-fetch": "^3.3.2",
