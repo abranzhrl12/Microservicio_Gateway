@@ -2,9 +2,45 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+input AssignPermissionsToRoleInput {
+  permissionIds: [ID!]!
+  roleId: Int!
+}
+
+input CreateMenuItemInput {
+  icon: String
+  isActive: Boolean! = true
+  label: String!
+  order: Float! = 0
+  parentId: ID
+  path: String!
+  requiredPermissions: [String!]
+}
+
+input CreatePermissionInput {
+  description: String
+  name: String!
+}
+
 input CreateRoleInput {
   description: String
   name: String!
+}
+
+input CreateUserInput {
+  avatarPublicId: String
+  avatarUrl: String
+
+  """Número de Documento Nacional de Identidad (DNI)."""
+  dni: String
+  email: String!
+  isActive: Boolean! = true
+  lastName: String
+  name: String!
+  password: String!
+
+  """ID del rol asignado al usuario"""
+  roleId: Int!
 }
 
 """
@@ -12,28 +48,85 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 """
 scalar DateTime
 
+type MenuItem {
+  """Hijos del ítem de menú."""
+  children: [MenuItem!]
+  createdAt: DateTime!
+  icon: String
+  id: ID!
+  isActive: Boolean!
+  label: String!
+
+  """Orden de visualización del ítem de menú."""
+  order: Int!
+
+  """El ítem de menú padre."""
+  parent: MenuItem
+
+  """ID del ítem de menú padre."""
+  parentId: ID
+  path: String
+
+  """Permisos requeridos para ver el ítem del menú."""
+  requiredPermissions: [String!]
+  updatedAt: DateTime!
+}
+
 type Mutation {
+  """
+  Asigna permisos a un rol específico (requiere permiso de gestión de roles y permisos).
+  """
+  assignPermissionsToRole(assignPermissionsToRoleInput: AssignPermissionsToRoleInput!): Role!
+
+  """
+  Crea un nuevo ítem de menú (requiere permiso de gestión de ítems de menú).
+  """
+  createMenuItem(createMenuItemInput: CreateMenuItemInput!): MenuItem!
+  createPermission(createPermissionInput: CreatePermissionInput!): Permission!
   createRole(createRoleInput: CreateRoleInput!): Role!
+  createUser(createUserInput: CreateUserInput!): User!
+
+  """Elimina un permiso necesitar tener permiso de admin"""
+  removePermission(id: ID!): Boolean!
 
   """Elimina un rol (requiere permiso para eliminar roles)."""
   removeRole(id: ID!): Boolean!
+  updatePermission(id: ID!, updatePermissionInput: UpdatePermissionInput!): Permission!
   updateRole(id: ID!, updateRoleInput: UpdateRoleInput!): Role!
+
+  """
+  Actualiza los datos de un usuario por su ID (requiere permiso para gestionar usuarios).
+  """
+  updateUser(id: ID!, updateUserInput: UpdateUserInput!): User!
+
+  """
+  Actualiza el estado activo/inactivo de un usuario (requiere permiso para gestionar estados de usuario).
+  """
+  updateUserStatus(id: ID!, updateUserStatusInput: UpdateUserStatusInput!): User!
 }
 
-type PaginatedRoles {
-  """El número de la página actual."""
+type PaginatedPermissions {
   currentPage: Int!
-
-  """Lista de roles en la página actual."""
-  items: [Role!]!
-
-  """La cantidad de elementos por página."""
+  items: [Permission!]
   itemsPerPage: Int!
-
-  """Número total de elementos disponibles en todas las páginas."""
   totalItems: Int!
+  totalPages: Int!
+}
 
-  """Número total de páginas disponibles."""
+"""Respuesta paginada para la lista de roles."""
+type PaginatedRoles {
+  currentPage: Int!
+  items: [Role!]
+  itemsPerPage: Int!
+  totalItems: Int!
+  totalPages: Int!
+}
+
+type PaginatedUsers {
+  currentPage: Int!
+  items: [User!]
+  itemsPerPage: Int!
+  totalItems: Int!
   totalPages: Int!
 }
 
@@ -45,11 +138,28 @@ input PaginationInput {
   page: Int = 1
 }
 
+type Permission {
+  description: String
+  id: ID!
+  name: String!
+  roles: [Role!]
+}
+
 type Query {
+  findAllPermissions(paginationInput: PaginationInput): PaginatedPermissions!
   findAllRoles(paginationInput: PaginationInput): PaginatedRoles!
+  findAllUsers(paginationInput: PaginationInput): PaginatedUsers!
+
+  """
+  Obtiene un permiso por su nombre (requiere permiso de vista de permisos).
+  """
+  findPermissionByName(name: String!): Permission!
 
   """Obtiene un rol por su ID."""
   findRoleById(id: ID!): Role!
+
+  """Busca y filtra usuarios con paginación."""
+  searchUsers(paginationInput: UsersPaginationInput): PaginatedUsers!
 }
 
 type Role {
@@ -60,7 +170,64 @@ type Role {
   updatedAt: DateTime
 }
 
+input UpdatePermissionInput {
+  description: String
+  id: ID
+  name: String
+}
+
 input UpdateRoleInput {
   description: String
   name: String
+}
+
+input UpdateUserInput {
+  """ID público de la nueva imagen de perfil en Cloudinary."""
+  avatarPublicId: String
+
+  """URL de la nueva imagen de perfil del usuario."""
+  avatarUrl: String
+
+  """Número de Documento Nacional de Identidad (DNI)."""
+  dni: String
+  email: String
+  isActive: Boolean
+  lastName: String
+  name: String
+  password: String
+
+  """Nuevo ID del rol para el usuario."""
+  roleId: Int
+}
+
+input UpdateUserStatusInput {
+  isActive: Boolean!
+}
+
+type User {
+  avatarPublicId: String
+  avatarUrl: String
+  createdAt: DateTime!
+  dni: String
+  email: String!
+  id: ID!
+  isActive: Boolean!
+  lastName: String
+  name: String!
+  role: Role
+  roleId: ID
+  updatedAt: DateTime!
+}
+
+input UsersPaginationInput {
+  dniFilter: String
+  emailFilter: String
+
+  """Cantidad de elementos por página (por defecto: 10)."""
+  limit: Int = 10
+  nameFilter: String
+
+  """Número de página deseada (por defecto: 1)."""
+  page: Int = 1
+  roleIdFilter: Int
 }

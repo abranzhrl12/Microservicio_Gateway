@@ -1,22 +1,8 @@
-// src/common/interfaces/paginated-roles.interface.ts
+// src/common/models/paginated-roles.model.ts (Es una convención usar .model.ts para tipos GraphQL en el Gateway)
 
-import { Field, Int, ObjectType } from '@nestjs/graphql';
-import { Role } from './role.interface'; // Asegúrate de que la ruta a tu Role sea correcta
+import { ObjectType } from '@nestjs/graphql';
+import { Role } from '../interfaces/role.interface'; // <-- Asegúrate que esta ruta sea correcta a tu Role @ObjectType()
+import { PaginatedResponse } from '../models/paginated-response.model';
 
-@ObjectType()
-export class PaginatedRoles {
-  @Field(() => [Role], { description: 'Lista de roles en la página actual.' })
-  items: Role[];
-
-  @Field(() => Int, { description: 'Número total de elementos disponibles en todas las páginas.' })
-  totalItems: number;
-
-  @Field(() => Int, { description: 'Número total de páginas disponibles.' })
-  totalPages: number;
-
-  @Field(() => Int, { description: 'El número de la página actual.' })
-  currentPage: number;
-
-  @Field(() => Int, { description: 'La cantidad de elementos por página.' })
-  itemsPerPage: number;
-}
+@ObjectType({ description: 'Respuesta paginada para la lista de roles.' })
+export class PaginatedRoles extends PaginatedResponse(Role) {}

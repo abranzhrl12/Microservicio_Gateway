@@ -13,6 +13,7 @@ import { UpdateRoleInput } from 'src/roles/dto/update-role.input';
 import { updateRoleMutation } from 'src/graphql-queries';
 import { OrchestratorResult } from 'src/common/interfaces/orchestrator-result.interface';
 import { transformDates } from 'src/common/utils/date.utils';
+import { AssignPermissionsToRoleInput } from 'src/permission/dto/assign-permissions-to-role.input';
 
 @Resolver(() => Role) // Indica que este resolver es para el tipo GraphQL 'Role'
 @UseGuards(JwtAuthGuard) // Aplica la guardia a todas las operaciones de este resolver
@@ -135,7 +136,7 @@ export class RolesResolver {
 
   // *** NUEVA QUERY findRoleById ***
   @Query(() => Role, { name: 'findRoleById', description: 'Obtiene un rol por su ID.' })
-  // @HasPermission('view_roles') // El permiso ya se verifica en el microservicio de Auth.
+
   async findRoleById(
     @Args('id', { type: () => ID }) id: string, // ¡Importante: ID en GraphQL es string!
     @Context() context: any,
@@ -163,6 +164,51 @@ export class RolesResolver {
     return orchestratorResult.body as Role;
   }
 
-  
+   @Mutation(() => Role, {
+    name: 'assignPermissionsToRole',
+    description: 'Asigna permisos a un rol específico (requiere permiso de gestión de roles y permisos).',
+  })
+  // Se asume que 'manage_roles_permissions' es el permiso requerido para esta acción.
+  async assignPermissionsToRole(
+    @Args('assignPermissionsToRoleInput') input: AssignPermissionsToRoleInput,
+    @Context() context: any,
+  ): Promise<Role> {
+    const req = context.req;
+    const correlationId =
+      (req as any).id || `gql-req-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const authorizationHeader = req.headers.authorization;
+
+    this.logger.log(
+      `[${correlationId}] Recibida mutación GraphQL para asignar permisos al rol con ID: ${input.roleId}.`,
+    );
+    this.logger.debug(
+      `[${correlationId}] Argumento 'assignPermissionsToRoleInput' recibido: ${JSON.stringify(input)}`,
+    );
+
+    // Llama al Orchestrator para manejar la lógica de comunicación con el microservicio de Auth
+    const orchestratorResult = await this.roleOrchestrator.assignPermissionsToRole(
+      input.roleId,
+      input.permissionIds,
+      correlationId,
+      authorizationHeader,
+    );
+
+    if (orchestratorResult.errors && orchestratorResult.errors.length > 0) {
+      const errorMessage =
+        orchestratorResult.message || 'Ocurrió un error inesperado al asignar permisos.';
+      throw new HttpException(
+        errorMessage,
+        orchestratorResult.statusCode || 500,
+      );
+    }
+    
+    // Asegúrate de que el body no sea null/undefined antes de castear
+    if (!orchestratorResult.body) {
+        this.logger.error(`[${correlationId}] El orquestador de roles no devolvió un cuerpo en la respuesta de asignación de permisos.`);
+        throw new HttpException('Respuesta inesperada del orquestador.', 500);
+    }
+
+    return orchestratorResult.body as Role;
+  }
 
 }

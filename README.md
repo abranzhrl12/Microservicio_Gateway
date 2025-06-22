@@ -240,10 +240,186 @@ Respuestas Comunes:
     "operationName": "CreateRole"
 }
 
-//remove
+//remove role
 {
     "query": "mutation RemoveRole($id: ID!) { removeRole(id: $id) }",
     "variables": {
         "id": "7"  // Reemplaza "7" con el ID del rol que quieres eliminar
     }
+}
+
+//asignar permisos role
+{
+  "query": "mutation AssignPermissionsToRole($assignPermissionsToRoleInput: AssignPermissionsToRoleInput!) { assignPermissionsToRole(assignPermissionsToRoleInput: $assignPermissionsToRoleInput) { id name  createdAt updatedAt   } }",
+  "variables": {
+    "assignPermissionsToRoleInput": {
+      "roleId": 2,      
+      "permissionIds": [        
+        "d27165db-9726-4a5f-bb23-e9898c10a4b7"          
+      ]
+    }
+  },
+  "operationName": "AssignPermissionsToRole"
+}
+
+
+//crear permisos 
+{
+  "query": "mutation CreateNewPermission($input: CreatePermissionInput!) { createPermission(createPermissionInput: $input) { id name description } }",
+  "variables": {
+    "input": {
+      "name": "can_assss",
+      "description": "Permite al usuario ver el dashboard principal de la aplicación."
+    }
+  },
+  "operationName": "CreateNewPermission"
+}
+//traer permisos 
+{
+  "query": "query FindAllPermissions($paginationInput: PaginationInput) { findAllPermissions(paginationInput: $paginationInput) { items { id name description } totalItems totalPages currentPage itemsPerPage } }",
+  "variables": {
+    "paginationInput": {
+      "page": 1,
+      "limit": 10
+    }
+  },
+  "operationName": "FindAllPermissions"
+}
+
+//actulizar permisos
+{
+  "query": "mutation UpdatePermission($id: ID!, $updatePermissionInput: UpdatePermissionInput!) { updatePermission(id: $id, updatePermissionInput: $updatePermissionInput) { id name description } }",
+  "variables": {
+    "id": "8c7c8b56-43ff-4cb5-9e83-917b128cc771",
+    "updatePermissionInput": {
+      "name": "debe eliminarse",
+      "description": "Nueva descripción del permiso actualizado."
+    }
+  },
+  "operationName": "UpdatePermission"
+}
+//remover permisos
+
+{
+  "query": "mutation RemovePermission($id: ID!) { removePermission(id: $id) }",
+  "variables": {
+    "id": "9715fdb5-841e-4f4e-a4da-e5490546e854"
+  }
+}
+
+//para buscar por name filtro permission
+{
+  "query": "query FindPermissionByName($name: String!) { findPermissionByName(name: $name) { id name description } }",
+  "variables": {
+    "name": "de"
+  },
+  "operationName": "FindPermissionByName"
+}
+
+//crear usuario
+{
+  "query": "mutation CreateUser($createUserInput: CreateUserInput!) { createUser(createUserInput: $createUserInput) { id email dni name lastName isActive avatarUrl avatarPublicId createdAt updatedAt role { id name description } } }",
+  "variables": {
+    "createUserInput": {
+      "email": "abran@gmail.com",
+      "password": "12345678",
+      "name": "Abraham",
+      "lastName": "Rodriguez",
+      "dni": "74752487",
+      "roleId": 2, 
+      "isActive": true
+
+    }
+  },
+  "operationName": "CreateUser"
+}
+
+//finallusers
+{
+  "query": "query FindAllUsers($paginationInput: PaginationInput) { findAllUsers(paginationInput: $paginationInput) { items { id email name lastName dni isActive avatarUrl avatarPublicId createdAt updatedAt  role { id name    } } totalItems totalPages currentPage itemsPerPage } }",
+  "variables": {
+    "paginationInput": {
+      "page": 6,
+      "limit": 1
+    }
+  },
+  "operationName": "FindAllUsers"
+}
+
+
+//actulizar usuario
+{
+  "query": "mutation UpdateUser($id: ID!, $updateUserInput: UpdateUserInput!) { updateUser(id: $id, updateUserInput: $updateUserInput) { id email dni name lastName isActive avatarUrl avatarPublicId createdAt updatedAt  role { id name description } } }",
+  "variables": {
+    "id": "1",
+    "updateUserInput": {
+      "email": "nuevo.email@ejemplo.com",
+      "name": "NuevoNombre",
+      "lastName": "NuevoApellido",
+      "dni": "12345667",
+      "roleId": 2, 
+      "isActive": true 
+
+    }
+  },
+  "operationName": "UpdateUser"
+}
+
+//actulizar estado de usuario isactive
+{
+  "query": "mutation UpdateUserStatus($id: ID!, $updateUserStatusInput: UpdateUserStatusInput!) { updateUserStatus(id: $id, updateUserStatusInput: $updateUserStatusInput) { id email isActive createdAt updatedAt } }",
+  "variables": {
+    "id": 1, 
+    "updateUserStatusInput": {
+      "isActive": false 
+    }
+  },
+  "operationName": "UpdateUserStatus"
+}
+//buscar nombre dni rol o eamil
+{
+  "query": "query SearchUsers($paginationInput: UsersPaginationInput) { searchUsers(paginationInput: $paginationInput) { items { id email name lastName dni isActive avatarUrl avatarPublicId role { id name } } totalItems totalPages currentPage itemsPerPage } }",
+  "variables": {
+    "paginationInput": {
+      "page": 1,
+      "limit": 10,
+      "nameFilter": "a",      
+      "emailFilter": null,
+      "dniFilter": null,
+      "roleIdFilter":  null
+    }
+  },
+  "operationName": "SearchUsers"
+}
+
+//crear item menu padre
+{
+  "query": "mutation CreateMenuItem($createMenuItemInput: CreateMenuItemInput!) { createMenuItem(createMenuItemInput: $createMenuItemInput) { ...MenuItemFields } } fragment MenuItemFields on MenuItem { id label path icon isActive order parentId requiredPermissions  children { id label } }",
+  "variables": {
+    "createMenuItemInput": {
+      "label": "Dashboard",
+      "path": "/dashboard",
+      "icon": "home",
+      "isActive": true,
+      "order": 1,
+      "requiredPermissions": ["view_dashboard"]
+    }
+  },
+  "operationName": "CreateMenuItem"
+}
+//crear menu item hijo
+{
+  "query": "mutation CreateMenuItem($createMenuItemInput: CreateMenuItemInput!) { createMenuItem(createMenuItemInput: $createMenuItemInput) { ...MenuItemFields } } fragment MenuItemFields on MenuItem { id label path icon isActive order parentId requiredPermissions  children { id label } }",
+  "variables": {
+    "createMenuItemInput": {
+      "label": "Reportes",
+      "path": "/dashboard/reports",
+      "icon": "chart",
+      "isActive": true,
+      "order": 2,
+      "requiredPermissions": ["view_users_category"],
+      "parentId": "c045bed3-1318-4fb4-8bbe-a24ac110b68a" // <-- ¡AQUÍ ES DONDE ESPECIFICAS EL PADRE!
+    }
+  },
+  "operationName": "CreateMenuItem"
 }

@@ -19,20 +19,3 @@ export class Role {
   updatedAt: Date;
 }
 
-@InputType() // También debe ser una clase
-export class CreateRoleInput {
-  @Field()
-  name: string;
-
-  @Field({ nullable: true })
-  description?: string;
-}
-
-@InputType() // Y esta también
-export class UpdateRoleInput {
-  @Field({ nullable: true })
-  name?: string;
-
-  @Field({ nullable: true })
-  description?: string;
-}

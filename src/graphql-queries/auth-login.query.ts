@@ -10,24 +10,21 @@ export const loginQuery = gql`
         id
         email
         name
+        dni
         lastName
         isActive
         avatarUrl
         avatarPublicId
-        createdAt
-        updatedAt
         role {
           id
           name
-          createdAt
-          description
           permissions {
-            description
             id
             name
           }
         }
       }
     }
+      
   }
 `;

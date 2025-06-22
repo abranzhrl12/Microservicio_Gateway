@@ -1,15 +1,18 @@
 // src/orchestrators/role/role.orchestrator.ts (EN TU API GATEWAY - CORREGIDO)
 import { Injectable, Inject, Logger, HttpStatus } from '@nestjs/common';
-import { createRoleMutation, findAllRolesQuery,findRoleByIdQuery,removeRoleMutation,updateRoleMutation } from 'src/graphql-queries';
+import {  createRoleMutation, findAllRolesQuery,findRoleByIdQuery,removeRoleMutation,updateRoleMutation ,ASSIGN_PERMISSIONS_TO_ROLE_MUTATION} from 'src/graphql-queries';
 import { OrchestratorResult } from 'src/common/interfaces/orchestrator-result.interface';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom,timeout } from 'rxjs';
 import { ClientProxy } from '@nestjs/microservices';
 import { PaginationInput } from 'src/common/dto/pagination.input';
 import { PaginatedRoles } from 'src/common/interfaces/paginated-roles.interface';
 import { deepTransformDates, transformDates } from 'src/common/utils/date.utils';
 import { CreateRoleInput } from '../../roles/dto/create-role.input';
 import { UpdateRoleInput } from '../../roles/dto/update-role.input';
-import { Args, Context, Mutation } from '@nestjs/graphql';
+import { Role } from 'src/common/interfaces/role.interface';
+
+
+
 
 @Injectable()
 export class RoleOrchestrator {
@@ -20,13 +23,13 @@ export class RoleOrchestrator {
   ) {}
 
 
-  private async sendGraphqlRequest(
+  private async sendGraphqlRequest<T = any>(
     correlationId: string,
     query: string,
     variables: any,
     authorizationHeader?: string,
     operationName: string = 'GraphQL Operation',
-  ): Promise<OrchestratorResult> {
+  ): Promise<OrchestratorResult<T>>  {
     this.logger.log(
       `[${correlationId}] [Role Orchestrator] Enviando solicitud a Auth Service para ${operationName} vía NATS.`,
     );
@@ -48,9 +51,11 @@ export class RoleOrchestrator {
             variables: variables,
             headers: headersToSend,
           },
+        ).pipe(
+          timeout(10000), 
         ),
       );
-
+       this.logger.error(`[${correlationId}] RAW_MICROSERVICE_RESPONSE for ${operationName}: ${JSON.stringify(response)}`);
       if (response && response.errors && response.errors.length > 0) {
         this.logger.error(
           `[${correlationId}] [Role Orchestrator] Errores de GraphQL del Auth Service al ${operationName}: ${JSON.stringify(response.errors)}`,
@@ -225,4 +230,42 @@ export class RoleOrchestrator {
     result.body = result.body.findRoleById; 
     return result;
   }
+
+   // --- ¡NUEVO MÉTODO PARA ASIGNAR PERMISOS A ROLES! ---
+  async assignPermissionsToRole(
+    roleId: number,
+    permissionIds: string[],
+    correlationId: string,
+    authorizationHeader?: string,
+  ): Promise<OrchestratorResult<Role>> {
+    this.logger.log(
+      `[${correlationId}] [Roles Orchestrator] Iniciando orquestación para asignar permisos a rol con ID: ${roleId}.`,
+    );
+
+    const result = await this.sendGraphqlRequest<any>(
+      correlationId,
+      ASSIGN_PERMISSIONS_TO_ROLE_MUTATION, // Usar la GraphQL mutation definida
+      { assignPermissionsToRoleInput: { roleId, permissionIds } }, // Pasar los argumentos al microservicio
+      authorizationHeader,
+      'asignar permisos a rol',
+    );
+
+    if (result.errors && result.errors.length > 0) {
+      return result;
+    }
+    
+    if (!result.body) {
+        // Manejar el caso donde no hay body pero tampoco errores explícitos del microservicio
+        return {
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            errors: [{ message: 'Respuesta inesperada del microservicio de autenticación: cuerpo vacío.' }],
+            message: 'Error interno del Gateway: respuesta incompleta.',
+            body: undefined
+        };
+    }
+
+    result.body = result.body.assignPermissionsToRole as Role;
+    return result;
+  }
+
 }

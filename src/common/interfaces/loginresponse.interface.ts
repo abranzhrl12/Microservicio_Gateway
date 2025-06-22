@@ -48,9 +48,14 @@ export interface LoginUserResponse {
 // Respuesta completa de GraphQL del Auth Service
 export interface AuthLoginServiceResponse {
   data?: {
-    loginUser: LoginUserResponse;
+    loginUser?: {
+      accessToken: string;
+      refreshToken: string; // <-- Asegúrate de que esta línea esté presente
+      user: User;
+      // Otros campos que tu microservicio Auth pueda devolver en loginUser
+    };
   };
-  errors?: any[]; // Array de errores de GraphQL si los hay
+  errors?: any[]; // Errores GraphQL devueltos por el microservicio
 }
 
 // Estructura de un ítem de menú de la barra lateral
@@ -73,12 +78,13 @@ export interface SidebarServiceResponse {
 // Estructura del resultado final que devuelve el LoginOrchestrator al AuthController
 export interface LoginOrchestratorResult {
   statusCode: number;
-  success: boolean; // Indica si la orquestación fue exitosa en general
+  success: boolean;
   body: {
-    accessToken?: string;
-    user?: User;
-    sidebarMenu?: SidebarMenuItem[];
-    message?: string; // Mensaje general para el frontend
-    errors?: any[]; // Errores detallados para el frontend
+    accessToken: string | null;
+    refreshToken: string | null; // <-- Asegúrate de que esta línea esté presente
+    user: User | null;
+    sidebarMenu?: SidebarMenuItem[]; // Es opcional porque el sidebar podría fallar
+    message?: string;
+    errors?: any[];
   };
 }

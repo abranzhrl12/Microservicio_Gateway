@@ -13,20 +13,25 @@ import { ExecutionResult, GraphQLError } from 'graphql';
 import { GraphQLISODateTime, GraphQLModule } from '@nestjs/graphql';
 import { MercuriusDriver, MercuriusDriverConfig } from '@nestjs/mercurius';
 import { join } from 'path';
+import { PermissionsModule } from './permission/permissions.module';
+import { UsersModule } from './users/users.module';
+import { MenuItemsModule } from './menu-items/menu-items.module';
 
 @Module({
   imports: [
-    // ConfigModule para cargar las variables de entorno y validarlas con Joi
     ConfigModule.forRoot({
-      load: [EnvConfiguration],        // Cargar la configuración
-      isGlobal: true,                  // Hacerla global para acceder desde cualquier parte de la app
-      envFilePath: '.env',             // Especifica la ruta de tu archivo .env
-      validationSchema: JoiValidationSchema,  // Aplica la validación Joi
+      load: [EnvConfiguration],        
+      isGlobal: true,                  
+      envFilePath: '.env',          
+      validationSchema: JoiValidationSchema, 
     }),
     NatsClientModule,
     AuthModule,  
     WebSocketModule,
+    UsersModule,
     RolesModule,
+    PermissionsModule,
+    MenuItemsModule,
     GraphQLModule.forRoot<MercuriusDriverConfig>({
       driver: MercuriusDriver,
        autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
@@ -35,6 +40,7 @@ import { join } from 'path';
       context: ({ req }) => ({ req }),
       jit: 10,
       resolvers: { DateTime: GraphQLISODateTime },
+      
       errorFormatter: (execution: ExecutionResult & { errors: GraphQLError[] }, context: any) => {
         
         const error = execution.errors[0];
