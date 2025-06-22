@@ -9,3 +9,11 @@ export interface OrchestratorResult<T = any> { // <-- ¡Añadido el genérico T!
   message?: string; // Un mensaje general descriptivo de la operación
   success?: boolean; // ¡No olvides esta propiedad si la usas en tu servicio!
 }
+
+export interface OrchestratorError {
+  message: string;
+  code?: string; // Opcional: un código de error específico
+  path?: string[]; // Opcional: para errores GraphQL
+  locations?: any[]; // Opcional: para errores GraphQL
+  extensions?: any; // Opcional: para errores GraphQL
+}

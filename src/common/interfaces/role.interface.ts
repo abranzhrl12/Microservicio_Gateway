@@ -1,4 +1,12 @@
-import { Field, GraphQLISODateTime, ID, InputType, ObjectType } from '@nestjs/graphql';
+import {
+  Field,
+  GraphQLISODateTime,
+  ID,
+  InputType,
+  ObjectType,
+} from '@nestjs/graphql';
+import { IsOptional } from 'class-validator';
+import { Permission } from './permissions.interface';
 
 @ObjectType() // ¡Debe ser una clase y tener este decorador!
 export class Role {
@@ -16,6 +24,11 @@ export class Role {
 
   // Usa GraphQLISODateTime aquí
   @Field(() => GraphQLISODateTime, { nullable: true }) // <-- ¡Esto es crucial!
-  updatedAt: Date;
+  updatedAt: Date; // ¡Añade este campo aquí!
+  @IsOptional()
+  @Field(() => [Permission], {
+    nullable: true,
+    description: 'Permisos asociados a este rol.',
+  })
+  permissions?: Permission[];
 }
-

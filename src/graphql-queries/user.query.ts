@@ -15,7 +15,6 @@ export const USER_FIELDS = gql`
     avatarPublicId
     createdAt
     updatedAt
-    roleId
     role {
       id
       name

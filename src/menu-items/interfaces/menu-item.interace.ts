@@ -2,7 +2,6 @@
 // (Asegúrate de que esta ruta sea consistente con tu estructura de módulos)
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 
-
 @ObjectType()
 export class MenuItem {
   @Field(() => ID)

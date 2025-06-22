@@ -1,273 +1,171 @@
-// src/orchestrators/login/login.orchestrator.ts
-import {
-  Injectable,
-  InternalServerErrorException, // Aunque ahora devolvemos objetos, aún útil para errores internos del orquestador
-  Logger,
-  Inject,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { ClientProxy } from '@nestjs/microservices';
+// src/orchestrators/login/login.orchestrator.ts (ARCHIVO COMPLETO Y CORREGIDO PARA EL GATEWAY)
 
-// ¡Asegúrate que estas rutas y las interfaces estén bien definidas!
-import { loginQuery, sidebarQuery } from '../../graphql-queries'; // Asegúrate que sea un index.ts o directo
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { ClientProxy, RpcException } from '@nestjs/microservices';
+import { firstValueFrom, timeout } from 'rxjs';
+import { LoginInputDto } from 'src/auth/dto/login-input.dto';
+import { AuthResponse } from 'src/auth/models/auth-response.model';
+
 import {
-  LoginInput,
-  AuthLoginServiceResponse,
-  SidebarServiceResponse,
-  LoginOrchestratorResult,
-  User,
-  SidebarMenuItem,
-} from '../../common/interfaces/loginresponse.interface'; // ¡Nombre del archivo corregido a login-response.interface!
+  OrchestratorError,
+  OrchestratorResult,
+} from 'src/common/interfaces/orchestrator-result.interface';
+import { deepTransformDates } from 'src/common/utils/date.utils';
+import { MenuItem } from 'src/menu-items/interfaces/menu-item.interace';
 
 @Injectable()
 export class LoginOrchestrator {
   private readonly logger = new Logger(LoginOrchestrator.name);
-  private AUTH_SERVICE_URL: string;
-  private SIDEBAR_SERVICE_URL: string;
-
-  constructor(
-    private configService: ConfigService,
-    // La inyección de NATS_SERVICE ha sido comentada/eliminada
-    // @Inject('NATS_SERVICE') private readonly natsClient: ClientProxy,
-  ) {
-    const authUrl = this.configService.get<string>('AUTH_SERVICE_URL');
-    const sidebarUrl = this.configService.get<string>('SIDEBAR_SERVICE_URL');
-
-    if (!authUrl) {
-      this.logger.error('AUTH_SERVICE_URL no definido en el Gateway.');
-      throw new InternalServerErrorException('AUTH_SERVICE_URL no definido en las variables de entorno.');
-    }
-    if (!sidebarUrl) {
-      this.logger.error('SIDEBAR_SERVICE_URL no definido en el Gateway.');
-      throw new InternalServerErrorException('SIDEBAR_SERVICE_URL no definido en las variables de entorno.');
-    }
-
-    this.AUTH_SERVICE_URL = authUrl;
-    this.SIDEBAR_SERVICE_URL = sidebarUrl;
-  }
+  constructor(@Inject('NATS_SERVICE') private authServiceClient: ClientProxy) {}
 
   async orchestrateLogin(
-    loginInputFromFrontend: LoginInput,
+    loginInput: LoginInputDto,
     correlationId: string,
-  ): Promise<LoginOrchestratorResult> {
-    this.logger.log(`[${correlationId}] [Login Orchestrator] Iniciando login orquestado.`);
-    this.logger.debug(`[${correlationId}] Recibiendo input de solicitud (limpio): ${JSON.stringify(loginInputFromFrontend)}`);
+  ): Promise<OrchestratorResult<AuthResponse>> {
+    this.logger.log(
+      `[${correlationId}] [LoginOrchestrator] Iniciando orquestación de login.`,
+    );
 
-    const authServiceGraphqlUrl = `${this.AUTH_SERVICE_URL}/auth`;
-    const sidebarServiceGraphqlUrl = `${this.SIDEBAR_SERVICE_URL}/sidebar-menu`;
-
-    let accessToken: string | null = null;
-    let refreshToken: string | null = null; // <--- **CORREGIDO: Declarado e inicializado aquí**
-    let user: User | null = null;
-    let sidebarMenu: SidebarMenuItem[] = [];
-    let sidebarErrors: any[] = [];
-    let loginSuccessful = false; // Bandera para controlar la ejecución de la llamada al sidebar
+    let accessToken: string;
+    let refreshToken: string;
+    let user: any; // El tipo User exacto de tu AuthResponse
+    let menuItems: MenuItem[] | undefined; // Usar SidebarItem según tu definición
 
     try {
-      // 1. Llamada al Microservicio de Autenticación
-      const authRequestBody = JSON.stringify({
-        query: loginQuery,
-        variables: { loginInput: loginInputFromFrontend },
-      });
-
-      const authController = new AbortController();
-      const authTimeoutId = setTimeout(() => authController.abort(), 10000); // 10 segundos de timeout
-
-      this.logger.debug(`[${correlationId}] Realizando fetch a Auth Service: ${authServiceGraphqlUrl}`);
-      this.logger.debug(`[${correlationId}] Fetch Body enviado al Auth Service: ${authRequestBody}`);
-
-      const loginResponse = await fetch(authServiceGraphqlUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: authRequestBody,
-        signal: authController.signal,
-      });
-
-      clearTimeout(authTimeoutId); // Limpia el timeout si la respuesta llega a tiempo
-
-      if (!loginResponse.ok) { // Si la respuesta HTTP no es 2xx
-        const errorResponseText = await loginResponse.text();
-        let errorResponseData;
-        try { errorResponseData = JSON.parse(errorResponseText); } catch (e) { errorResponseData = { message: errorResponseText || loginResponse.statusText || 'Error desconocido' }; }
-        this.logger.warn(
-          `[${correlationId}] [Login Orchestrator] HTTP Error del Auth Service (${loginResponse.status}): ${JSON.stringify(errorResponseData)}`,
-        );
-        // NO EMITIR EVENTOS NATS SI SE HAN ELIMINADO LOS NATS CLIENTS
-        return {
-          statusCode: loginResponse.status,
-          success: false,
-          body: {
-            accessToken: null,
-            refreshToken: null, // <--- **CORREGIDO: Se asegura que sea null en caso de error**
-            user: null,
-            message: errorResponseData.message || 'Error en el servicio de autenticación.',
-            errors: errorResponseData.errors || [{ message: 'Respuesta inesperada del servicio de autenticación.' }],
-          },
-        };
-      }
-
-      const loginData: AuthLoginServiceResponse = await loginResponse.json();
-
-      // **CORREGIDO: Ahora se chequea tanto accessToken como refreshToken en la desestructuración**
-      if (loginData.errors || !loginData.data?.loginUser?.accessToken || !loginData.data?.loginUser?.refreshToken) {
-        this.logger.warn(
-          `[${correlationId}] [Login Orchestrator] Falló el login en Auth Service (GraphQL errors o tokens faltantes): ${JSON.stringify(loginData.errors || loginData)}`,
-        );
-        // NO EMITIR EVENTOS NATS
-        return {
-          statusCode: loginResponse.status || 401,
-          success: false,
-          body: {
-            accessToken: null,
-            refreshToken: null, // <--- **CORREGIDO: Se asegura que sea null en caso de error**
-            user: null,
-            message: 'Credenciales inválidas o error en el servicio de autenticación.',
-            errors: loginData.errors || [{ message: 'Respuesta inesperada del servicio de autenticación.' }],
-          },
-        };
-      }
-
-      // **CORREGIDO: Desestructurar refreshToken directamente de loginData.data.loginUser**
-      ({ accessToken, refreshToken, user } = loginData.data.loginUser);
-      loginSuccessful = true; // El login fue exitoso, ahora podemos intentar obtener el sidebar
-      this.logger.log(
-        `[${correlationId}] [Login Orchestrator] Login exitoso para usuario: ${user.email}`,
+      // 1. LLAMADA AL MICROSERVICIO DE AUTENTICACIÓN (Auth Service)
+      this.logger.debug(
+        `[${correlationId}] Enviando 'login_request' a Auth Service.`,
+      ); // <--- LOG ACTUALIZADO
+      const authResult = await firstValueFrom(
+        // ¡ESTE ES EL CAMBIO CLAVE EN EL GATEWAY!
+        // Cambiamos 'graphql_request' a 'login_request' para que coincida con el nuevo @MessagePattern
+        // en el microservicio de autenticación.
+        this.authServiceClient
+          .send({ cmd: 'login_request' }, { correlationId, loginInput })
+          .pipe(
+            timeout(10000), // Timeout para esta llamada
+          ),
       );
-      // NO EMITIR EVENTOS NATS
+      this.logger.debug(
+        `[${correlationId}] RAW_MICROSERVICE_RESPONSE from Auth Service: ${JSON.stringify(authResult)}`,
+      ); // Manejo de errores de Auth Service
 
+      if (authResult.errors && authResult.errors.length > 0) {
+        this.logger.error(
+          `[${correlationId}] Errores de Auth Service: ${JSON.stringify(authResult.errors)}`,
+        );
+        return {
+          statusCode: authResult.statusCode || HttpStatus.BAD_REQUEST,
+          message:
+            authResult.message || 'Error en el servicio de autenticación.',
+          errors: authResult.errors,
+        };
+      } // Aplicar deepTransformDates a los datos del usuario si Auth Service devuelve fechas
 
-      // 2. Llamada al Microservicio de Sidebar/Navegación (Solo si el login fue exitoso y tenemos accessToken)
-      if (loginSuccessful && accessToken) { // Solo se ejecuta si el paso 1 fue exitoso
-        try {
-          const sidebarController = new AbortController();
-          const sidebarTimeoutId = setTimeout(() => sidebarController.abort(), 10000);
+      const transformedAuthBody = deepTransformDates(authResult.body);
+      accessToken = transformedAuthBody.accessToken;
+      refreshToken = transformedAuthBody.refreshToken;
+      user = transformedAuthBody.user;
+      this.logger.debug(
+        `[${correlationId}] Datos de usuario del Auth Service transformados.`,
+      ); // 2. LLAMADA AL MICROSERVICIO DE SIDEBAR (Sidebar Service)
+      // Solo si el login fue exitoso y tenemos un usuario y accessToken
 
-          this.logger.debug(`[${correlationId}] Realizando fetch a Sidebar Service: ${sidebarServiceGraphqlUrl}`);
-          const sidebarRequestBody = JSON.stringify({
-            query: sidebarQuery,
-            variables: {},
-          });
-          this.logger.debug(`[${correlationId}] Fetch Body enviado al Sidebar Service: ${sidebarRequestBody}`);
+      if (user && accessToken) {
+        this.logger.debug(
+          `[${correlationId}] Enviando 'sidebar_get_user_menu' a Sidebar Service para userId: ${user.id}`,
+        );
+        const sidebarMenuResult = await firstValueFrom(
+          // CORREGIDO: Usar this.authServiceClient (esto ya estaba bien)
+          this.authServiceClient
+            .send(
+              { cmd: 'sidebar_get_user_menu' },
+              {
+                correlationId,
+                userId: user.id, // Pasar el token de acceso para que Sidebar Service pueda validarlo y obtener permisos
+                authorization: accessToken, // No necesitas 'Bearer ' aquí, Sidebar Listener lo manejará
+              },
+            )
+            .pipe(
+              timeout(10000), // Timeout para esta llamada
+            ),
+        );
+        this.logger.debug(
+          `[${correlationId}] RAW_MICROSERVICE_RESPONSE from Sidebar Service: ${JSON.stringify(sidebarMenuResult)}`,
+        ); // Manejo de errores de Sidebar Service
 
-          const sidebarResponse = await fetch(sidebarServiceGraphqlUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`, // Autentica la llamada al Sidebar
-            },
-            body: sidebarRequestBody,
-            signal: sidebarController.signal,
-          });
+        if (sidebarMenuResult.errors && sidebarMenuResult.errors.length > 0) {
+          this.logger.error(
+            `[${correlationId}] Errores de Sidebar Service: ${JSON.stringify(sidebarMenuResult.errors)}`,
+          );
+          return {
+            statusCode:
+              sidebarMenuResult.statusCode || HttpStatus.INTERNAL_SERVER_ERROR,
+            message:
+              sidebarMenuResult.message ||
+              'Error al obtener el menú del sidebar.',
+            errors: sidebarMenuResult.errors,
+          };
+        } // Aplicar deepTransformDates a los ítems del menú si Sidebar Service devuelve fechas
 
-          clearTimeout(sidebarTimeoutId);
+        menuItems = deepTransformDates(sidebarMenuResult.body.menuItems);
+        this.logger.debug(
+          `[${correlationId}] Datos del menú del Sidebar Service transformados.`,
+        );
+      } else {
+        this.logger.warn(
+          `[${correlationId}] Usuario o accessToken no disponibles para solicitar menú del sidebar.`,
+        );
+      } // 3. COMBINAR Y RETORNAR LA RESPUESTA FINAL AL FRONTEND
 
-          if (!sidebarResponse.ok) {
-            const errorResponseText = await sidebarResponse.text();
-            let errorResponseData;
-            try { errorResponseData = JSON.parse(errorResponseText); } catch (e) { errorResponseData = { message: errorResponseText || sidebarResponse.statusText || 'Error desconocido' }; }
-            this.logger.error(
-              `[${correlationId}] [Login Orchestrator] HTTP Error del Sidebar Service (${sidebarResponse.status}): ${JSON.stringify(errorResponseData)}`,
-            );
-            sidebarErrors.push({
-              message: errorResponseData.message || `Error del Sidebar Service (${sidebarResponse.status}).`,
-              details: errorResponseData.errors || errorResponseData,
-            });
-            // NO EMITIR EVENTOS NATS
-          } else {
-            const sidebarData: SidebarServiceResponse = await sidebarResponse.json();
-
-            if (sidebarData.errors) {
-              this.logger.error(
-                `[${correlationId}] [Login Orchestrator] Falló al obtener sidebar del Sidebar Service (GraphQL errors): ${JSON.stringify(sidebarData.errors)}`,
-              );
-              sidebarErrors = sidebarData.errors;
-              // NO EMITIR EVENTOS NATS
-            } else {
-              sidebarMenu = sidebarData.data?.getSidebarMenu || [];
-              this.logger.log(
-                `[${correlationId}] [Login Orchestrator] Sidebar obtenido para usuario: ${user.email}`,
-              );
-              // NO EMITIR EVENTOS NATS
-            }
-          }
-        } catch (sidebarError: any) {
-          if (sidebarError.name === 'AbortError') {
-            this.logger.error(
-              `[${correlationId}] [Login Orchestrator] Timeout al llamar al Sidebar Service: ${sidebarError.message}`,
-            );
-            sidebarErrors.push({
-              message: 'Timeout al intentar obtener el menú del Sidebar Service.',
-            });
-            // NO EMITIR EVENTOS NATS
-          } else {
-            this.logger.error(
-              `[${correlationId}] [Login Orchestrator] Error de red o inesperado al llamar al Sidebar Service: ${sidebarError.message}`,
-              sidebarError.stack,
-            );
-            sidebarErrors.push({
-              message: sidebarError.message || 'Error desconocido al obtener el menú.',
-            });
-            // NO EMITIR EVENTOS NATS
-          }
-        }
-      }
-
-      // 3. Combinar y devolver la respuesta final al Frontend
+      this.logger.log(
+        `[${correlationId}] Orquestación de login completada exitosamente.`,
+      );
       return {
-        statusCode: 200,
-        success: sidebarErrors.length === 0, // Indicar éxito si no hubo errores en sidebar
+        statusCode: HttpStatus.OK,
         body: {
           accessToken,
-          refreshToken, // <--- **CORREGIDO: Incluido en la respuesta final**
+          refreshToken,
           user,
-          sidebarMenu,
-          // Solo incluye 'errors' y 'message' si hay errores en el sidebar
-          ...(sidebarErrors.length > 0 && {
-            errors: sidebarErrors,
-            message: 'Login exitoso, pero no se pudo cargar el menú completamente. Intente de nuevo más tarde.',
-          }),
+          menuItems, // Incluir los ítems del menú (pueden ser undefined si no se pudieron obtener)
         },
+        message: 'Login exitoso y menú cargado.',
       };
-
     } catch (error: any) {
-      // Manejo de errores que ocurrieron antes de la desestructuración de loginData,
-      // o errores de timeout generales del Auth Service
-      if (error.name === 'AbortError') {
-        this.logger.error(
-          `[${correlationId}] [Login Orchestrator] Timeout al llamar al Auth Service: ${error.message}`,
-        );
-        // NO EMITIR EVENTOS NATS
-        return {
-          statusCode: 504, // Gateway Timeout
-          success: false,
-          body: {
-            accessToken: null,
-            refreshToken: null, // <--- **CORREGIDO: Asegurarse de retornar null aquí en caso de error**
-            user: null,
-            message: 'Timeout al contactar el servicio de autenticación durante el login.',
-            errors: [{ message: 'El servicio de autenticación tardó demasiado en responder.' }],
-          },
+      this.logger.error(
+        `[${correlationId}] Error en la orquestación de login: ${error.message}`,
+        error.stack,
+      ); // Manejo de RpcException (errores lanzados por los microservicios)
+
+      if (error instanceof RpcException) {
+        const rpcError = error.getError() as {
+          statusCode?: number;
+          message?: string;
+          errors?: OrchestratorError[];
         };
-      } else {
-        this.logger.error(
-          `[${correlationId}] [Login Orchestrator] Error crítico durante login orquestado: ${error.message}`,
-          error.stack,
-        );
-        // NO EMITIR EVENTOS NATS
         return {
-          statusCode: 500,
-          success: false,
-          body: {
-            accessToken: null,
-            refreshToken: null, // <--- **CORREGIDO: Asegurarse de retornar null aquí en caso de error**
-            user: null,
-            message: 'Error interno del Gateway al procesar el login.',
-            errors: [{ message: error.message || 'Error desconocido en el orquestador de login.' }],
-          },
+          statusCode: rpcError.statusCode || HttpStatus.INTERNAL_SERVER_ERROR,
+          message:
+            rpcError.message ||
+            'Error en el microservicio remoto durante el login.',
+          errors: rpcError.errors || [{ message: 'Error RPC desconocido.' }],
+        };
+      } // Manejo de errores de timeout (desde el pipe(timeout(X)))
+
+      if (error.name === 'TimeoutError') {
+        return {
+          statusCode: HttpStatus.GATEWAY_TIMEOUT,
+          message: `El microservicio no respondió a tiempo: ${error.message}`,
+          errors: [{ message: `Timeout: ${error.message}` }],
         };
       }
+      return {
+        statusCode: error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'Error interno del Gateway al orquestar el login.',
+        errors: [
+          { message: error.message || 'Error inesperado en el orquestador.' },
+        ],
+      };
     }
   }
 }

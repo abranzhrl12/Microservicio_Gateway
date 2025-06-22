@@ -423,3 +423,16 @@ Respuestas Comunes:
   },
   "operationName": "CreateMenuItem"
 }
+
+
+//login 
+{
+  "query": "mutation LoginUser($loginInput: LoginInput!) { loginUser(loginInput: $loginInput) { accessToken user { id email dni name lastName isActive avatarUrl avatarPublicId createdAt updatedAt role { createdAt description id name updatedAt permissions { description id name } } } menuItems { id label path icon   parentId requiredPermissions children { id label path icon parentId } } } }",
+  "variables": {
+    "loginInput": {
+      "email": "test@gmail.com",
+      "password": "12345678"
+    }
+  },
+  "operationName": "LoginUser"
+}

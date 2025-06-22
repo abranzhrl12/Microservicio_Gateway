@@ -6,7 +6,9 @@ import { JwtStrategy } from 'src/auth/strategies/jwt.strategy';
 import { ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
 import { LoginOrchestrator } from 'src/orchestrators/login/login.orchestrator';
-import { AuthController } from './auth.controller';
+import { AuthResolver } from './auth.resolver';
+import { NatsClientModule } from 'src/nats-client/nats-client.module';
+
 
 
 @Module({
@@ -20,10 +22,11 @@ import { AuthController } from './auth.controller';
       }),
     }),
     ClientsModule,
+    NatsClientModule
     
   ],
-  controllers:[AuthController],
-  providers: [JwtStrategy,LoginOrchestrator],
+  // controllers:[AuthController],
+  providers: [JwtStrategy,LoginOrchestrator,AuthResolver],
   exports: [PassportModule, JwtModule],
 })
 export class AuthModule {}
