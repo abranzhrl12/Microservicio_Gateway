@@ -16,6 +16,7 @@ import { join } from 'path';
 import { PermissionsModule } from './permission/permissions.module';
 import { UsersModule } from './users/users.module';
 import { MenuItemsModule } from './menu-items/menu-items.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { MenuItemsModule } from './menu-items/menu-items.module';
     RolesModule,
     PermissionsModule,
     MenuItemsModule,
+    FilesModule,
     GraphQLModule.forRoot<MercuriusDriverConfig>({
       driver: MercuriusDriver,
        autoSchemaFile: join(process.cwd(), 'src/schema.gql'),

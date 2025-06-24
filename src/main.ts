@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import { configureFastifyPlugins, createFastifyInstance } from './config/fastify.config';
 import { AppModule } from './app.module';
-
+import mercuriusUpload from 'mercurius-upload';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const fastifyInstance = createFastifyInstance(logger);
@@ -19,6 +19,13 @@ async function bootstrap() {
       logger: ['log', 'error', 'warn', 'debug', 'verbose'],
     },
   );
+
+    await fastifyInstance.register(mercuriusUpload, {
+    maxFileSize: 50_000_000, // 50 MB (ajusta según tus necesidades)
+    maxFiles: 10,
+  });
+  logger.log('Plugin mercurius-upload registrado.');
+  // =========================================
 
   app.useLogger(logger);
 
