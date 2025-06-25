@@ -25,4 +25,5 @@ export const JoiValidationSchema = Joi.object({
     )
     .default(['http://localhost:4000']),
       NATS_URL: Joi.string().uri().required(),
+       COOKIE_SECRET: Joi.string().required(),
 });

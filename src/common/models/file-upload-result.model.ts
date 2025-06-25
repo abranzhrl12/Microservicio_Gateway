@@ -8,7 +8,7 @@ export class FileUploadResultModel {
 
   @Field(() => String, { description: 'El ID público del archivo para operaciones de eliminación/consulta.' })
   publicId: string;
-
+  
   @Field(() => String, { description: 'El nombre original del archivo.' })
   fileName: string;
 
@@ -18,6 +18,4 @@ export class FileUploadResultModel {
   @Field(() => Int, { description: 'El tamaño del archivo en bytes.' })
   size: number;
 
-  // Asegúrate de que todos los campos de tu interfaz FileUploadResult estén aquí
-  // y decorados con @Field()
 }

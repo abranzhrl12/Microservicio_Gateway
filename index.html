@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -144,6 +144,277 @@
         messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 sendBtn.click();
+            }
+        });
+    </script>
+</body>
+</html> -->
+
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actualizar Usuario y Avatar (Todo en Uno)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 25px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: bold;
+        }
+
+        .input-group input[type="text"],
+        .input-group input[type="number"],
+        .input-group input[type="email"],
+        .input-group input[type="file"] {
+            width: calc(100% - 20px); /* Resta padding */
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box; /* Incluye padding en el width */
+        }
+
+        .input-group input[type="file"] {
+            padding: 3px 10px; /* Ajuste para el input de archivo */
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            white-space: pre-wrap; /* Para mantener los saltos de línea y espacios del JSON */
+            word-wrap: break-word; /* Para que el texto largo se rompa en varias líneas */
+            font-family: monospace;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .response.success {
+            background-color: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+
+        .response.error {
+            background-color: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Actualizar Perfil de Usuario</h1>
+
+        <div class="input-group">
+            <label for="jwtToken">Token JWT:</label>
+            <input type="text" id="jwtToken" placeholder="Pega tu token JWT aquí" size="80">
+        </div>
+
+        <div class="input-group">
+            <label for="userId">ID de Usuario:</label>
+            <input type="number" id="userId" value="1" placeholder="Ej: 1">
+        </div>
+
+        <div class="input-group">
+            <label for="userEmail">Email:</label>
+            <input type="email" id="userEmail" placeholder="nuevo.email@ejemplo.com">
+        </div>
+
+        <div class="input-group">
+            <label for="userName">Nombre:</label>
+            <input type="text" id="userName" placeholder="Juan">
+        </div>
+
+        <div class="input-group">
+            <label for="userLastName">Apellido:</label>
+            <input type="text" id="userLastName" placeholder="Pérez">
+        </div>
+
+        <div class="input-group">
+            <label for="userDni">DNI:</label>
+            <input type="text" id="userDni" placeholder="12345678">
+        </div>
+
+        <div class="input-group">
+            <label for="avatarFile">Seleccionar Avatar:</label>
+            <input type="file" id="avatarFile" accept="image/*">
+        </div>
+
+        <button id="updateUserBtn">Actualizar Usuario</button>
+
+        <div id="response" class="response"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const userIdInput = document.getElementById('userId');
+            const userEmailInput = document.getElementById('userEmail');
+            const userNameInput = document.getElementById('userName');
+            const userLastNameInput = document.getElementById('userLastName');
+            const userDniInput = document.getElementById('userDni');
+            const avatarFileInput = document.getElementById('avatarFile');
+            const jwtTokenInput = document.getElementById('jwtToken');
+            const updateUserBtn = document.getElementById('updateUserBtn');
+            const responseDiv = document.getElementById('response');
+
+            // ¡IMPORTANTE! Asegúrate de que esta URL sea la de tu GATEWAY, no la de un microservicio individual.
+            // Si tu Gateway escucha en 3000, cámbialo a http://localhost:3000/graphql
+            const GRAPHQL_ENDPOINT = 'http://localhost:4000/graphql'; // Corregido a 3000 asumiendo tu Gateway
+
+            updateUserBtn.addEventListener('click', async () => {
+                const userId = userIdInput.value;
+                const jwtToken = jwtTokenInput.value.trim();
+                const avatarFile = avatarFileInput.files[0]; // Obtiene el primer archivo seleccionado
+
+                if (!userId) {
+                    displayResponse('Por favor, ingresa el ID del usuario.', 'error');
+                    return;
+                }
+
+                if (!jwtToken) {
+                    displayResponse('Por favor, pega el token JWT.', 'error');
+                    return;
+                }
+
+                const variables = {
+                    id: userId,
+                    updateUserInput: {
+                        // Solo incluye los campos que tienen valor
+                        ...(userEmailInput.value && { email: userEmailInput.value }),
+                        ...(userNameInput.value && { name: userNameInput.value }),
+                        ...(userLastNameInput.value && { lastName: userLastNameInput.value }),
+                        ...(userDniInput.value && { dni: userDniInput.value }),
+                        // Si hay un archivo, el campo avatarFile debe ser 'null' en las variables.
+                        // El mecanismo de GraphQL Upload lo reemplazará con el binario real.
+                        ...(avatarFile ? { avatarFile: null } : {}), // ¡Asegúrate de que esta línea esté aquí!
+                    },
+                };
+
+                // La mutación GraphQL. ¡Corregida para que coincida con tu esquema!
+                const query = `
+                    mutation UpdateUserWithAvatar($id: ID!, $updateUserInput: UpdateUserInput!) {
+                        updateUser(id: $id, updateUserInput: $updateUserInput) {
+                            id
+                            email
+                            name
+                            lastName
+                            dni
+                            isActive
+                            avatarUrl
+                            avatarPublicId
+                            createdAt
+                            updatedAt
+                            role {
+                                id
+                                name
+                            }
+                        }
+                    }
+                `;
+                // ^^^^^^^^ NOTA EL CAMBIO: Ya NO hay "$avatarFile: Upload" aquí
+                // y "avatarFile: $avatarFile" como argumento directo de updateUser.
+
+
+                const formData = new FormData();
+
+                // Operaciones GraphQL (JSON que describe la query y variables)
+                formData.append('operations', JSON.stringify({
+                    query,
+                    variables
+                }));
+
+                // Mapeo de dónde está el archivo en las variables
+                // ¡CORREGIDO para apuntar DENTRO de updateUserInput!
+                formData.append('map', JSON.stringify({
+                    '0': ['variables.updateUserInput.avatarFile'] // <--- ¡ESTE ES EL CAMBIO CLAVE!
+                }));
+
+                // Adjunta el archivo si existe
+                if (avatarFile) {
+                    // La clave '0' debe coincidir con el índice usado en 'map'
+                    formData.append('0', avatarFile);
+                }
+
+                try {
+                    const response = await fetch(GRAPHQL_ENDPOINT, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${jwtToken}`
+                            // No necesitas 'Content-Type': 'multipart/form-data', fetch lo establece automáticamente con FormData
+                        },
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (result.errors) {
+                        displayResponse(`Error: ${JSON.stringify(result.errors, null, 2)}`, 'error');
+                    } else {
+                        displayResponse(`Usuario actualizado exitosamente:\n${JSON.stringify(result.data.updateUser, null, 2)}`, 'success');
+                    }
+
+                } catch (error) {
+                    console.error('Error al enviar la solicitud:', error);
+                    displayResponse(`Error de red o inesperado: ${error.message}`, 'error');
+                }
+            });
+
+            function displayResponse(message, type) {
+                responseDiv.textContent = message;
+                responseDiv.className = `response ${type}`; // Añade clase 'success' o 'error'
             }
         });
     </script>

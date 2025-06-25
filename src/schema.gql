@@ -224,7 +224,12 @@ input UpdateRoleInput {
 }
 
 input UpdateUserInput {
-  """ID público de la nueva imagen de perfil en Cloudinary."""
+  """
+  Archivo de avatar a subir. Si se proporciona, se ignorará avatarUrl y avatarPublicId directos.
+  """
+  avatarFile: Upload
+
+  """ID público de la nueva imagen de perfil en Cloudinary/BunnyCDN."""
   avatarPublicId: String
 
   """URL de la nueva imagen de perfil del usuario."""

@@ -1,28 +1,39 @@
-import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Logger, Scope, UnauthorizedException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom, timeout } from 'rxjs';
 import { OrchestratorResult } from 'src/common/interfaces/orchestrator-result.interface';
 import { deepTransformDates } from 'src/common/utils/date.utils';
-import { create } from 'domain';
 import { CreateUserInput } from 'src/users/dto/create-user.input';
-import { CREATE_USER_MUTATION, FIND_ALL_USERS_QUERY, SEARCH_USERS_QUERY, UPDATE_USER_MUTATION, UPDATE_USER_STATUS_MUTATION } from 'src/graphql-queries/user.query';
+import {
+  CREATE_USER_MUTATION,
+  FIND_ALL_USERS_QUERY,
+  SEARCH_USERS_QUERY,
+  UPDATE_USER_MUTATION,
+  UPDATE_USER_STATUS_MUTATION,
+} from 'src/graphql-queries/user.query';
 import { User } from 'src/common/interfaces/users.interface';
 import { PaginationInput } from 'src/common/dto/pagination.input';
 import { PaginatedUsers } from 'src/common/models/paginated-users.model';
 import { UpdateUserInput } from 'src/users/dto/update-user.input';
 import { UpdateUserStatusInput } from 'src/users/dto/update-user-status.input';
+import { REQUEST } from '@nestjs/core'; // Todavía lo inyectamos por si lo usas en otros lados
+import { FastifyRequest } from 'fastify';
+import { AuthenticatedUser } from 'src/common/interfaces/authenticated-user.interface'; // Importa la interfaz
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class UsersOrchestrator {
   private readonly logger = new Logger(UsersOrchestrator.name);
-  constructor(@Inject('NATS_SERVICE') private authServiceClient: ClientProxy) {}
+  constructor(
+    @Inject('NATS_SERVICE') private authServiceClient: ClientProxy,
+    @Inject(REQUEST) private request: FastifyRequest, // Mantenemos la inyección por si la necesitas para otras cosas
+  ) {}
 
   private async sendGraphqlRequest<T = any>(
     correlationId: string,
     query: string,
     variables: any,
-    authorizationHeader?: string,
     operationName: string = 'GraphQL Operation',
+    authToken: string, // <-- ¡NUEVO PARÁMETRO: El token de autorización!
   ): Promise<OrchestratorResult<T>> {
     this.logger.log(
       `[${correlationId}] [Users Orchestrator] Enviando solicitud a Auth Service para ${operationName} vía NATS.`,
@@ -32,8 +43,14 @@ export class UsersOrchestrator {
       'X-Correlation-ID': correlationId,
     };
 
-    if (authorizationHeader) {
-      headersToSend['Authorization'] = authorizationHeader;
+    // Usamos el token que llega como argumento directamente
+    if (authToken) {
+      headersToSend['Authorization'] = `Bearer ${authToken}`;
+      this.logger.debug(`[${correlationId}] Authorization Header agregado para ${operationName} (obtenido explícitamente).`);
+    } else {
+      // Esto no debería suceder si el resolver ya lo validó, pero es un fallback
+      this.logger.error(`[${correlationId}] Petición a ${operationName} sin token de autorización explícito en el orquestador. Esto NO DEBERÍA OCURRIR.`);
+      throw new UnauthorizedException('Token de autorización ausente en el orquestador.');
     }
 
     try {
@@ -68,7 +85,6 @@ export class UsersOrchestrator {
         `[${correlationId}] [Users Orchestrator] ${operationName} exitosamente por Auth Service.`,
       );
 
-      // ¡¡¡CAMBIO CLAVE AQUÍ: APLICAR deepTransformDates AL response.data!!!
       const transformedData = deepTransformDates(response.data);
       this.logger.debug(
         `[${correlationId}] Datos de respuesta del Auth Service transformados con deepTransformDates.`,
@@ -76,7 +92,7 @@ export class UsersOrchestrator {
 
       return {
         statusCode: HttpStatus.OK,
-        body: transformedData, // Devolver los datos transformados
+        body: transformedData,
         errors: undefined,
         message: `${operationName} exitosamente.`,
       };
@@ -97,102 +113,86 @@ export class UsersOrchestrator {
     }
   }
 
+  // --- MÉTODOS PÚBLICOS DEL ORQUESTADOR CON NUEVO PARÁMETRO authToken ---
+
   async createUser(
     createUserInput: CreateUserInput,
     correlationId: string,
-    authorizationHeader?: string,
+    authToken: string, // <-- Nuevo parámetro
   ): Promise<OrchestratorResult> {
-    // O el tipo de dato que realmente devuelvas, como `User`
-    this.logger.log(
-      `[${correlationId}] Recibida mutación GraphQL para crear usuario.`,
-    );
-    this.logger.debug(
-      `[${correlationId}] Argumento 'createUserInput' recibido: ${JSON.stringify(createUserInput)}`,
-    );
-    this.logger.debug(
-      `[${correlationId}] Argumento 'authorizationHeader' recibido: ${JSON.stringify(authorizationHeader)}`,
-    );
+    this.logger.log(`[${correlationId}] Recibida mutación GraphQL para crear usuario.`);
+    this.logger.debug(`[${correlationId}] Argumento 'createUserInput' recibido: ${JSON.stringify(createUserInput)}`);
 
-    // Aquí utilizas la constante de la mutación GraphQL
     const result = await this.sendGraphqlRequest(
       correlationId,
-      CREATE_USER_MUTATION, // <-- ¡Aquí va la mutación!
-      { createUserInput: createUserInput }, // Las variables de GraphQL
-      authorizationHeader,
-      'crear usuario', // Descripción para logs o errores
+      CREATE_USER_MUTATION,
+      { createUserInput: createUserInput },
+      'crear usuario',
+      authToken, // <-- Pasando el token
     );
     if (result.errors) {
       return result;
     }
-
-    result.body = result.body.createUser; 
-
+    result.body = result.body.createUser;
     return result;
   }
+
   async findAllUsers(
     correlationId: string,
     paginationInput: PaginationInput,
-    authorizationHeader?: string
-  ):Promise<OrchestratorResult>{
-    this.logger.log(
-      `[${correlationId}] [Users Orchestrator] Iniciando orquestación para traer todos los usuarios con paginación.`,
-    )
-    const result= await this.sendGraphqlRequest(
+    authToken: string, // <-- Nuevo parámetro
+  ): Promise<OrchestratorResult> {
+    this.logger.log(`[${correlationId}] [Users Orchestrator] Iniciando orquestación para traer todos los usuarios con paginación.`);
+    const result = await this.sendGraphqlRequest(
       correlationId,
       FIND_ALL_USERS_QUERY,
       { paginationInput: paginationInput },
-      authorizationHeader,
       'obtener usuarios paginados',
-    )
-    if(result.errors){
-      return result
+      authToken, // <-- Pasando el token
+    );
+    if (result.errors) {
+      return result;
     }
-    result.body = result.body.findAllUsers as PaginatedUsers
-    return result
-
+    result.body = result.body.findAllUsers as PaginatedUsers;
+    return result;
   }
+
   async updateUser(
+    correlationId: string,
     id: number,
     updateUserInput: UpdateUserInput,
-    correlationId: string,
-    authorizationHeader?: string
-  ):Promise<OrchestratorResult>{
-    this.logger.log(
-      `[${correlationId}] [Users Orchestrator] Iniciando orquestación para actualizar usuario con ID: ${id}.`,
-    )
+    authToken: string, // <-- Nuevo parámetro
+  ): Promise<OrchestratorResult> {
+    this.logger.log(`[${correlationId}] [Users Orchestrator] Iniciando orquestación para actualizar usuario con ID: ${id}.`);
 
-    const result= await this.sendGraphqlRequest(
+    const result = await this.sendGraphqlRequest(
       correlationId,
       UPDATE_USER_MUTATION,
       { id: id, updateUserInput: updateUserInput },
-      authorizationHeader,
       'actualizar usuario',
-    )
-    if(result.errors){
-      return result
+      authToken, // <-- Pasando el token
+    );
+    if (result.errors) {
+      return result;
     }
-    result.body = result.body.updateUser
-
+    result.body = result.body.updateUser as User;
     return result;
-
   }
 
   async updateUserStatus(
     correlationId: string,
     id: number,
     updateUserStatusInput: UpdateUserStatusInput,
-    authorizationHeader?: string,
+    authToken: string, // <-- Nuevo parámetro
   ): Promise<OrchestratorResult> {
-    this.logger.log(
-      `[${correlationId}] [Users Orchestrator] Iniciando orquestación para actualizar estado de usuario con ID: ${id}.`,
-    );
+    this.logger.log(`[${correlationId}] [Users Orchestrator] Iniciando orquestación para actualizar estado de usuario con ID: ${id}.`);
 
     const result = await this.sendGraphqlRequest(
       correlationId,
-      UPDATE_USER_STATUS_MUTATION, // Usamos la nueva mutación definida
-      { id, updateUserStatusInput: updateUserStatusInput }, // Pasamos el ID y el input
-      authorizationHeader,
-      'updateUserStatus', // Nombre de la operación GraphQL
+      UPDATE_USER_STATUS_MUTATION,
+      { id, updateUserStatusInput: updateUserStatusInput },
+      'updateUserStatus',
+      authToken, // <-- Pasando el token
     );
 
     if (result.errors) {
@@ -200,27 +200,23 @@ export class UsersOrchestrator {
       return result;
     }
 
-    // El resultado del microservicio tendrá el cuerpo de la respuesta GraphQL,
-    // que contendrá el objeto 'updateUserStatus'
-    result.body = result.body.updateUserStatus as User; // Extrae el usuario actualizado del body
+    result.body = result.body.updateUserStatus as User;
     return result;
   }
 
   async searchUsers(
     correlationId: string,
     paginationInput: PaginationInput,
-    authorizationHeader?: string,
+    authToken: string, // <-- Nuevo parámetro
   ): Promise<OrchestratorResult> {
-    this.logger.log(
-      `[${correlationId}] [Users Orchestrator] Iniciando orquestación para buscar y filtrar usuarios.`,
-    );
+    this.logger.log(`[${correlationId}] [Users Orchestrator] Iniciando orquestación para buscar y filtrar usuarios.`);
 
     const result = await this.sendGraphqlRequest(
       correlationId,
-      SEARCH_USERS_QUERY, // Usamos la nueva query definida
-      { paginationInput: paginationInput }, // Pasamos el input de paginación y filtros
-      authorizationHeader,
-      'searchUsers', // Nombre de la operación GraphQL
+      SEARCH_USERS_QUERY,
+      { paginationInput: paginationInput },
+      'searchUsers',
+      authToken, // <-- Pasando el token
     );
 
     if (result.errors) {
@@ -228,9 +224,7 @@ export class UsersOrchestrator {
       return result;
     }
 
-    // El resultado del microservicio tendrá el cuerpo de la respuesta GraphQL,
-    // que contendrá el objeto 'searchUsers' (PaginatedUsers)
-    result.body = result.body.searchUsers as PaginatedUsers; // Extrae el resultado paginado del body
+    result.body = result.body.searchUsers as PaginatedUsers;
     return result;
   }
 }

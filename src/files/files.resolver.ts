@@ -44,9 +44,6 @@ export class FilesResolver {
       fileName: filename,
       mimetype: mimetype,
       size: size,
-      // Opcional: puedes añadir 'folder' o 'entityId' si lo pasas desde el cliente o lo decides aquí
-      // folder: 'user-uploads',
-      // entityId: user?.id,
     };
 
     const uploadFileResult = await this.filesService.uploadFile(

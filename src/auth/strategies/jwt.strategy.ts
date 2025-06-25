@@ -1,52 +1,44 @@
-
-// src/auth/strategies/jwt.strategy.ts
 // src/auth/strategies/jwt.strategy.ts
 
-import { Injectable, UnauthorizedException, Logger } from '@nestjs/common'; // Mantengo Logger para el constructor y errores esenciales
+import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { FastifyRequest } from 'fastify';
+import { FastifyRequest } from 'fastify'; // Import FastifyRequest
 import { IncomingHttpHeaders } from 'http';
 
-// ¡FUNCIÓN DE EXTRACCIÓN DE JWT PERSONALIZADA Y MÁS ROBUSTA PARA FASTIFY/GRAPHQL!
-const jwtExtractor = (request: FastifyRequest): string | null => {
-  let headers: IncomingHttpHeaders | undefined;
+// --- IMPORT YOUR AUTHENTICATED USER INTERFACE HERE ---
+import { AuthenticatedUser, UserRole } from 'src/common/interfaces/authenticated-user.interface'; // <-- IMPORT HERE!
 
-  if (request && request.headers) {
-    headers = request.headers;
-  }
-
-  if (!headers || !headers.authorization) {
-    return null;
-  }
-
-  const authorizationHeader = headers.authorization;
-  const authString = Array.isArray(authorizationHeader) ? authorizationHeader[0] : authorizationHeader;
-
-  if (!authString) {
-    return null;
-  }
-
-  const [type, token] = authString.split(' ');
-  if (type === 'Bearer' && token) {
-    return token;
-  } else {
-    return null;
-  }
-};
-
+// The JwtPayload should reflect what's *inside* the token
 interface JwtPayload {
   sub: number;
   email: string;
-  role: string;
+  role: UserRole; // <-- Matches your AuthenticatedUser interface
+  permissions: string[];
   iat?: number;
   exp?: number;
 }
 
+// Your jwtExtractor code (no changes needed here as it only extracts token)
+const jwtExtractor = (request: FastifyRequest): string | null => {
+    // ... (your existing jwtExtractor code) ...
+    if (request && request.cookies && request.cookies.access_token) {
+        const token = request.cookies.access_token;
+        if (token) {
+            Logger.debug('Token JWT extraído de la cookie.', 'JwtExtractor');
+            (request as any).jwtToken = token; // Store for later in validate
+            return token;
+        }
+    }
+    // ... (rest of your jwtExtractor for Authorization header) ...
+    return null;
+};
+
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  private readonly logger = new Logger(JwtStrategy.name); // Mantengo el logger para errores
+  private readonly logger = new Logger(JwtStrategy.name);
 
   constructor(private configService: ConfigService) {
     super({
@@ -57,32 +49,39 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(req: FastifyRequest, payload: JwtPayload) {
-    // Si bien los headers son accesibles aquí, ya fueron procesados por jwtExtractor
-    // para obtener el token. No es necesario volver a verificarlos a menos que
-    // haya una lógica específica que los requiera.
+  // Ensure the return type matches your AuthenticatedUser interface
+  async validate(req: FastifyRequest, payload: JwtPayload): Promise<AuthenticatedUser> {
+    const rawToken = (req as any).jwtToken;
 
     if (payload.exp && Date.now() / 1000 > payload.exp) {
-        this.logger.error('Token ha expirado según el campo "exp" del payload.');
-        throw new UnauthorizedException('Token expirado.');
+      this.logger.error('Token ha expirado según el campo "exp" del payload.');
+      throw new UnauthorizedException('Token expirado.');
     }
 
-    if (!payload.sub) {
-      this.logger.error('Payload de JWT incompleto: Falta el campo "sub" (subject/user ID).');
-      throw new UnauthorizedException('Payload de JWT incompleto o inválido: Falta "sub".');
-    }
-    if (!payload.email) {
-      this.logger.error('Payload de JWT incompleto: Falta el campo "email".');
-      throw new UnauthorizedException('Payload de JWT incompleto o inválido: Falta "email".');
-    }
-    if (!payload.role) {
-      this.logger.error('Payload de JWT incompleto: Falta el campo "role".');
-      throw new UnauthorizedException('Payload de JWT incompleto o inválido: Falta "role".');
+    // --- Validate payload properties carefully ---
+    if (!payload.sub || !payload.email || !payload.permissions || !Array.isArray(payload.permissions)) {
+      this.logger.error(`Payload de JWT incompleto o inválido. Datos recibidos: ${JSON.stringify(payload)}`);
+      throw new UnauthorizedException('Payload de JWT incompleto o inválido: Faltan datos esenciales (sub, email, permissions).');
     }
 
-    // Aquí puedes asignar el usuario a la solicitud si lo necesitas en el contexto de GraphQL
-    req.user = { id: payload.sub, email: payload.email, role: payload.role };
+    // Specific validation for the 'role' object
+    if (!payload.role || typeof payload.role !== 'object' || !payload.role.id || !payload.role.name) {
+        this.logger.error('Payload de JWT incompleto o inválido: El campo "role" es incorrecto o faltante.');
+        throw new UnauthorizedException('Payload de JWT incompleto o inválido: El campo "role" es incorrecto o faltante.');
+    }
 
-    return payload;
+    // --- Construct the AuthenticatedUser object ---
+    const user: AuthenticatedUser = {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role, // Assign the full role object
+      permissions: payload.permissions,
+      token: rawToken,
+    };
+
+    // Assign to req.user (Fastify's request object)
+    req.user = user;
+
+    return user;
   }
 }

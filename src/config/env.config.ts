@@ -8,4 +8,5 @@ export const EnvConfiguration = () => ({
   sidebar_service_url: process.env.SIDEBAR_SERVICE_URL,
   natsUrl: process.env.NATS_URL,
   frontendUrls: process.env.FRONTEND_URLS,
+  cookieSecret: process.env.COOKIE_SECRET,
 });
