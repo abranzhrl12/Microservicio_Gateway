@@ -10,9 +10,15 @@ input AssignPermissionsToRoleInput {
 type AuthResponse {
   accessToken: String!
 
+  """Access token expiration time in seconds."""
+  accessTokenExpiresIn: Float
+
   """Elementos del menú del sidebar del usuario"""
   menuItems: [MenuItem!]
   refreshToken: String
+
+  """Refresh token expiration time in seconds."""
+  refreshTokenExpiresIn: Float
   user: User!
 }
 
@@ -121,6 +127,7 @@ type Mutation {
   """Elimina un archivo del servicio de archivos."""
   deleteFile(publicId: String!): Boolean!
   loginUser(loginInput: LoginInput!): AuthResponse!
+  refreshToken(refreshToken: String!): AuthResponse!
 
   """Elimina un permiso necesitar tener permiso de admin"""
   removePermission(id: ID!): Boolean!

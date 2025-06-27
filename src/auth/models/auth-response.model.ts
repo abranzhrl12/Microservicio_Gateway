@@ -17,5 +17,10 @@ export class AuthResponse {
     nullable: true,
     description: 'Elementos del menú del sidebar del usuario',
   })
-  menuItems?: MenuItem[]; // `undefined` es permitido, por eso `?` y `nullable: true`
+  menuItems?: MenuItem[]; 
+   @Field(() => Number, { nullable: true, description: 'Access token expiration time in seconds.' })
+  accessTokenExpiresIn?: number;
+
+  @Field(() => Number, { nullable: true, description: 'Refresh token expiration time in seconds.' })
+  refreshTokenExpiresIn?: number;
 }

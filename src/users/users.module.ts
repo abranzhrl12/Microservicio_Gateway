@@ -4,12 +4,14 @@ import { NatsClientModule } from 'src/nats-client/nats-client.module';
 import { UsersOrchestrator } from 'src/orchestrators/users/users.orchestrator';
 import { UsersResolver } from './users.resolver';
 import { FilesModule } from 'src/files/files.module';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     NatsClientModule, 
-    FilesModule
+    FilesModule,
+    AuthModule
   ],
   providers: [
     UsersOrchestrator,
